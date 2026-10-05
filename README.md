@@ -139,11 +139,11 @@ The database and everything under `data/` are generated and git-ignored:
 deleting the file simply means the next scan re-collects everything.
 
 `scripts/create_demo_repos.py` builds a small but messy demo dataset (clean,
-dirty, detached, bare, empty and abandoned repositories) so you can explore the
-UI without pointing it at your own work:
+dirty, detached, bare, empty and abandoned repositories, plus a contributor
+history) so you can explore the UI without pointing it at your own work:
 
 ```bash
-python scripts/create_demo_repos.py --root data/demo   # 8 repositories, ~545 commits
+python scripts/create_demo_repos.py --target data/demo  # 8 repositories, ~545 commits
 python -m app discover --register && python -m app scan --all
 ```
 

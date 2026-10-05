@@ -405,3 +405,23 @@ def test_openapi_schema_is_valid(client) -> None:
     paths = schema["paths"]
     for expected in ("/api/health", "/api/repositories", "/api/branches", "/api/scan/status", "/api/settings"):
         assert expected in paths
+
+
+# --------------------------------------------------------- architectural rules
+def test_request_handlers_never_spawn_processes() -> None:
+    """Architecture rule (E1): Git is invoked by collectors, never by a route.
+
+    A request handler that shells out would block the web server on a slow
+    repository, so subprocess use is confined to `app/collectors/`.
+    """
+    import app.api
+
+    api_dir = Path(app.api.__file__).parent
+    forbidden = ("import subprocess", "subprocess.", ".run(", "Popen(", "check_output(")
+    offenders = [
+        f"{path.relative_to(api_dir)}: {needle}"
+        for path in sorted(api_dir.rglob("*.py"))
+        for needle in forbidden
+        if needle in path.read_text(encoding="utf-8")
+    ]
+    assert offenders == [], f"request handlers must not run processes: {offenders}"
