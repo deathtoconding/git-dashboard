@@ -134,11 +134,17 @@ def inspect_path(path: str | os.PathLike[str]) -> DiscoveredRepository:
     if not str(path).strip():
         return DiscoveredRepository(path=resolved, name=resolved.name or str(resolved), error="Path must not be empty")
     if not resolved.exists():
-        return DiscoveredRepository(path=resolved, name=resolved.name or str(resolved), error=f"Path does not exist: {resolved}")
+        return DiscoveredRepository(
+            path=resolved, name=resolved.name or str(resolved), error=f"Path does not exist: {resolved}"
+        )
     if not resolved.is_dir():
-        return DiscoveredRepository(path=resolved, name=resolved.name or str(resolved), error=f"Not a directory: {resolved}")
+        return DiscoveredRepository(
+            path=resolved, name=resolved.name or str(resolved), error=f"Not a directory: {resolved}"
+        )
     if not os.access(resolved, os.R_OK | os.X_OK):
-        return DiscoveredRepository(path=resolved, name=resolved.name or str(resolved), error=f"Directory is not readable: {resolved}")
+        return DiscoveredRepository(
+            path=resolved, name=resolved.name or str(resolved), error=f"Directory is not readable: {resolved}"
+        )
 
     is_repo, is_bare = is_git_repository(resolved)
     if not is_repo:
@@ -231,7 +237,12 @@ def walk_repositories(
             queue.append((Path(entry.path), depth + 1))
 
     result.repositories.sort(key=lambda repo: str(repo.path).lower())
-    log.info("discovery finished for %s: %d repositories (%d dirs visited)", root_path, len(result.repositories), result.visited_dirs)
+    log.info(
+        "discovery finished for %s: %d repositories (%d dirs visited)",
+        root_path,
+        len(result.repositories),
+        result.visited_dirs,
+    )
     return result
 
 

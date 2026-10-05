@@ -82,8 +82,7 @@ def get_commit(
         # `git log --numstat` prints no diff for a merge unless asked, so make the
         # empty file list explicit instead of leaving consumers guessing.
         payload["note"] = (
-            "Merge commit: git reports no per-file diff for merges, "
-            "so no file statistics are stored for it."
+            "Merge commit: git reports no per-file diff for merges, so no file statistics are stored for it."
         )
     return payload
 

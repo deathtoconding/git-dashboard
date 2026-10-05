@@ -14,11 +14,17 @@ from app.database.store import Store
 
 def test_migrate_creates_every_table(database: Database) -> None:
     with database.connection() as conn:
-        names = {
-            row["name"]
-            for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
-        }
-    for table in ("repositories", "branches", "commits", "contributors", "file_changes", "scan_runs", "schema_version", "app_state"):
+        names = {row["name"] for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+    for table in (
+        "repositories",
+        "branches",
+        "commits",
+        "contributors",
+        "file_changes",
+        "scan_runs",
+        "schema_version",
+        "app_state",
+    ):
         assert table in names
     assert database.current_version() == SCHEMA_VERSION
 
@@ -57,7 +63,9 @@ def test_foreign_keys_cascade(tmp_path: Path) -> None:
 
 def test_upsert_repository_is_idempotent_by_path(store: Store) -> None:
     first = store.upsert_repository({"name": "demo", "path": "/tmp/demo", "total_commits": 1})
-    second = store.upsert_repository({"name": "renamed", "path": "/tmp/Demo", "path_key": "/tmp/demo", "total_commits": 5})
+    second = store.upsert_repository(
+        {"name": "renamed", "path": "/tmp/Demo", "path_key": "/tmp/demo", "total_commits": 5}
+    )
     assert first == second
     stored = store.get_repository(first)
     assert stored["name"] == "renamed"
@@ -84,9 +92,27 @@ def test_commit_queries_and_filters(store: Store) -> None:
     store.insert_commits(
         repository_id,
         [
-            {"sha": "a" * 40, "authored_at": "2026-01-01T00:00:00Z", "author_name": "Ada", "author_email": "ada@example.com", "subject": "first"},
-            {"sha": "b" * 40, "authored_at": "2026-02-01T00:00:00Z", "author_name": "Grace", "author_email": "grace@example.com", "subject": "second"},
-            {"sha": "c" * 40, "authored_at": "2026-03-01T00:00:00Z", "author_name": "Ada", "author_email": "ada@example.com", "subject": "third"},
+            {
+                "sha": "a" * 40,
+                "authored_at": "2026-01-01T00:00:00Z",
+                "author_name": "Ada",
+                "author_email": "ada@example.com",
+                "subject": "first",
+            },
+            {
+                "sha": "b" * 40,
+                "authored_at": "2026-02-01T00:00:00Z",
+                "author_name": "Grace",
+                "author_email": "grace@example.com",
+                "subject": "second",
+            },
+            {
+                "sha": "c" * 40,
+                "authored_at": "2026-03-01T00:00:00Z",
+                "author_name": "Ada",
+                "author_email": "ada@example.com",
+                "subject": "third",
+            },
         ],
     )
     rows, total = store.list_commits(repository_id, per_page=2)
@@ -109,8 +135,24 @@ def test_aggregates(store: Store) -> None:
     store.insert_commits(
         repository_id,
         [
-            {"sha": "a" * 40, "authored_at": "2026-01-01T00:00:00Z", "author_name": "Ada", "author_email": "ada@example.com", "additions": 10, "deletions": 2, "files_changed": 1},
-            {"sha": "b" * 40, "authored_at": "2026-01-02T00:00:00Z", "author_name": "Ada", "author_email": "ada@example.com", "additions": 5, "deletions": 1, "files_changed": 1},
+            {
+                "sha": "a" * 40,
+                "authored_at": "2026-01-01T00:00:00Z",
+                "author_name": "Ada",
+                "author_email": "ada@example.com",
+                "additions": 10,
+                "deletions": 2,
+                "files_changed": 1,
+            },
+            {
+                "sha": "b" * 40,
+                "authored_at": "2026-01-02T00:00:00Z",
+                "author_name": "Ada",
+                "author_email": "ada@example.com",
+                "additions": 5,
+                "deletions": 1,
+                "files_changed": 1,
+            },
         ],
     )
     store.replace_file_changes(repository_id, "a" * 40, [{"path": "x.py", "additions": 10, "deletions": 2}])
@@ -179,7 +221,16 @@ def test_missing_columns_are_defaulted(store: Store) -> None:
 
 def test_summary_counts(store: Store) -> None:
     repository_id = store.upsert_repository(
-        {"name": "demo", "path": "/tmp/demo", "uncommitted_files": 3, "staged_files": 1, "untracked_files": 2, "total_commits": 7, "branch_count": 4, "is_dirty": True}
+        {
+            "name": "demo",
+            "path": "/tmp/demo",
+            "uncommitted_files": 3,
+            "staged_files": 1,
+            "untracked_files": 2,
+            "total_commits": 7,
+            "branch_count": 4,
+            "is_dirty": True,
+        }
     )
     store.replace_branches(repository_id, [{"name": "main", "is_stale": False}, {"name": "old", "is_stale": True}])
     summary = store.repository_summary()

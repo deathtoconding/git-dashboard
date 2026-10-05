@@ -40,7 +40,20 @@ AUTHORS = [
     ("Margaret Hamilton", "margaret@example.com"),
 ]
 
-MODULES = ["api", "billing", "cache", "config", "database", "events", "handlers", "models", "router", "services", "utils", "worker"]
+MODULES = [
+    "api",
+    "billing",
+    "cache",
+    "config",
+    "database",
+    "events",
+    "handlers",
+    "models",
+    "router",
+    "services",
+    "utils",
+    "worker",
+]
 VERBS = ["add", "fix", "refactor", "document", "optimise", "harden", "extract", "rename", "test"]
 SUBJECTS = [
     "handle empty payloads",
@@ -160,7 +173,12 @@ def demo_repositories(target: Path, *, count: int, seed: int) -> list[Path]:
     if atlas is None:
         return created
     build_history(atlas, commits=120, start=now - timedelta(days=95), last=now - timedelta(hours=6), rng=rng)
-    for name, days_ago in [("feature/rate-limiting", 95), ("feature/audit-log", 120), ("bugfix/null-pointer", 88), ("release/1.2", 3)]:
+    for name, days_ago in [
+        ("feature/rate-limiting", 95),
+        ("feature/audit-log", 120),
+        ("bugfix/null-pointer", 88),
+        ("release/1.2", 3),
+    ]:
         git(atlas, "checkout", "-b", name, "main")
         base = now - timedelta(days=days_ago)
         write_file(atlas, f"docs/{name.replace('/', '-')}.md", f"# {name}\n")

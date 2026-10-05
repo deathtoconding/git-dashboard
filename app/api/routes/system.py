@@ -113,9 +113,7 @@ def update_settings(
         "changed": sorted(changes),
         "settings": updated.to_dict(),
         "restart_required_for": [
-            key
-            for key in changes
-            if key in {"host", "port", "database_path", "log_level", "refresh_interval_minutes"}
+            key for key in changes if key in {"host", "port", "database_path", "log_level", "refresh_interval_minutes"}
         ],
     }
 
@@ -237,9 +235,7 @@ def insights(
 def _days_ago(days: int) -> str:
     from datetime import timedelta
 
-    return (
-        (datetime.now(timezone.utc) - timedelta(days=days)).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-    )
+    return (datetime.now(timezone.utc) - timedelta(days=days)).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 def _global_series(store, *, days: int, bucket: str) -> list[dict[str, Any]]:
@@ -288,7 +284,9 @@ def export_csv(table: str, repository_id: int | None = Query(default=None), serv
 
 
 @router.post("/export/backup", summary="Copy the SQLite database to data/backups")
-def export_backup(directory: str | None = Query(default=None), services: Services = Depends(get_services)) -> dict[str, Any]:
+def export_backup(
+    directory: str | None = Query(default=None), services: Services = Depends(get_services)
+) -> dict[str, Any]:
     try:
         target = services.export.backup_database(directory=directory)
     except Exception as exc:  # noqa: BLE001

@@ -141,10 +141,17 @@ class RepositoryService:
             "errors": [error for result in results for error in result.errors],
         }
         if register:
-            paths = [str(repository.path) for result in results for repository in result.repositories if not repository.already_registered]
+            paths = [
+                str(repository.path)
+                for result in results
+                for repository in result.repositories
+                if not repository.already_registered
+            ]
             registration = self.add_many(paths)
             payload["registration"] = {
-                "added": [{"id": repo["id"], "name": repo["name"], "path": repo["path"]} for repo in registration["added"]],
+                "added": [
+                    {"id": repo["id"], "name": repo["name"], "path": repo["path"]} for repo in registration["added"]
+                ],
                 "skipped": registration["skipped"],
             }
             payload["registered_count"] = len(registration["added"])

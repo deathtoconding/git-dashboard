@@ -29,7 +29,9 @@ from app.analyzers.metrics import (
 NOW = datetime(2026, 6, 15, 12, 0, tzinfo=timezone.utc)
 
 
-def seed_repository(store, *, name="demo", commits=6, days_since_last=2, uncommitted=0, detached=False, branches=(), health_row=None):
+def seed_repository(
+    store, *, name="demo", commits=6, days_since_last=2, uncommitted=0, detached=False, branches=(), health_row=None
+):
     repository_id = store.upsert_repository(
         {
             "name": name,
@@ -63,9 +65,14 @@ def seed_repository(store, *, name="demo", commits=6, days_since_last=2, uncommi
         )
     store.insert_commits(repository_id, rows)
     for index in range(commits):
-        store.replace_file_changes(repository_id, f"{index:040d}", [{"path": "src/app.py", "additions": 10, "deletions": 4}])
+        store.replace_file_changes(
+            repository_id, f"{index:040d}", [{"path": "src/app.py", "additions": 10, "deletions": 4}]
+        )
     store.replace_contributors(repository_id, store.author_aggregates(repository_id))
-    store.replace_branches(repository_id, classify_branches(list(branches) or [{"name": "main", "is_current": True, "age_days": days_since_last}]))
+    store.replace_branches(
+        repository_id,
+        classify_branches(list(branches) or [{"name": "main", "is_current": True, "age_days": days_since_last}]),
+    )
     return repository_id
 
 
@@ -214,7 +221,10 @@ def test_working_tree_reduces_health_and_warns(store) -> None:
     assert tree_signal["score"] < 60
     codes = {warning["code"] for warning in health["working_tree_warnings"]}
     assert {"detached_head", "uncommitted_changes"} <= codes
-    assert any("42 uncommitted" in warning["message"] or "42" in warning["message"] for warning in health["working_tree_warnings"])
+    assert any(
+        "42 uncommitted" in warning["message"] or "42" in warning["message"]
+        for warning in health["working_tree_warnings"]
+    )
 
 
 @pytest.mark.parametrize(
@@ -234,7 +244,9 @@ def test_staleness_for_empty_repository() -> None:
 
 
 def test_working_tree_warnings_content() -> None:
-    warnings = working_tree_warnings({"uncommitted_files": 5, "staged_files": 2, "untracked_files": 1, "detached_head": True})
+    warnings = working_tree_warnings(
+        {"uncommitted_files": 5, "staged_files": 2, "untracked_files": 1, "detached_head": True}
+    )
     codes = [warning["code"] for warning in warnings]
     assert codes[0] == "detached_head"
     assert "staged_changes" in codes and "untracked_files" in codes
@@ -242,7 +254,9 @@ def test_working_tree_warnings_content() -> None:
 
 
 def test_recommendations_are_actionable(store) -> None:
-    branches = classify_branches([{"name": "main", "is_current": True, "age_days": 1}, {"name": "old", "age_days": 200}])
+    branches = classify_branches(
+        [{"name": "main", "is_current": True, "age_days": 1}, {"name": "old", "age_days": 200}]
+    )
     summary = branch_health_summary(branches, inactive_days=30, stale_days=90)
 
     class Config:

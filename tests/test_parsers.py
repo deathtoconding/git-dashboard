@@ -64,9 +64,8 @@ def test_parse_commit_log_extracts_every_field() -> None:
 
 
 def test_parse_commit_log_handles_merge_and_binary() -> None:
-    text = (
-        commit_record(parents="b" * 40, refs="", subject="merge branch", numstat="")
-        + commit_record(sha="c" * 40, parents="a" * 40, refs="", subject="binary file", numstat="-\t-\tlogo.png\n")
+    text = commit_record(parents="b" * 40, refs="", subject="merge branch", numstat="") + commit_record(
+        sha="c" * 40, parents="a" * 40, refs="", subject="binary file", numstat="-\t-\tlogo.png\n"
     )
     commits, files = parse_commit_log(text)
     assert [commit["is_merge"] for commit in commits] == [False, False]  # single parent each
@@ -164,13 +163,13 @@ def test_age_in_days_never_negative() -> None:
 def test_parse_status_porcelain_counts_every_category() -> None:
     text = "\n".join(
         [
-            " M src/modified.py",       # unstaged modification
-            "M  src/staged.py",         # staged modification
-            "A  src/added.py",          # staged addition
-            "MM src/both.py",           # staged + unstaged
-            "?? untracked.txt",         # untracked
-            "!! ignored.log",           # ignored - must be skipped
-            "UU src/conflict.py",       # conflict
+            " M src/modified.py",  # unstaged modification
+            "M  src/staged.py",  # staged modification
+            "A  src/added.py",  # staged addition
+            "MM src/both.py",  # staged + unstaged
+            "?? untracked.txt",  # untracked
+            "!! ignored.log",  # ignored - must be skipped
+            "UU src/conflict.py",  # conflict
         ]
     )
     counts = parse_status_porcelain(text)

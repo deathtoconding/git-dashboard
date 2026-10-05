@@ -39,7 +39,9 @@ class _RepoFormatter(logging.Formatter):
 _CONFIGURED = False
 
 
-def configure_logging(level: str = "INFO", *, log_file: str | os.PathLike[str] | None = None, force: bool = False) -> None:
+def configure_logging(
+    level: str = "INFO", *, log_file: str | os.PathLike[str] | None = None, force: bool = False
+) -> None:
     """Configure the root logger.  Safe to call more than once."""
     global _CONFIGURED
     if _CONFIGURED and not force:

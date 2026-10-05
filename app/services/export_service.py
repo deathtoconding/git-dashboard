@@ -33,9 +33,7 @@ class ExportService:
     # ------------------------------------------------------------------- helpers
     def snapshot(self, *, repository_id: int | None = None, include_commits: bool = True) -> dict[str, Any]:
         """Build a JSON-serialisable snapshot of the dashboard data."""
-        repositories = (
-            [self.store.get_repository(repository_id)] if repository_id else self.store.list_repositories()
-        )
+        repositories = [self.store.get_repository(repository_id)] if repository_id else self.store.list_repositories()
         payload: dict[str, Any] = {
             "generated_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
             "settings": self.settings.to_dict(include_paths=False),

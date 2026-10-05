@@ -22,7 +22,9 @@ def scan_status(services: Services = Depends(get_services)) -> dict[str, Any]:
 
 
 @router.get("/scan/jobs", summary="Recent background scan jobs")
-def scan_jobs(limit: int = Query(default=10, ge=1, le=50), services: Services = Depends(get_services)) -> dict[str, Any]:
+def scan_jobs(
+    limit: int = Query(default=10, ge=1, le=50), services: Services = Depends(get_services)
+) -> dict[str, Any]:
     return {"items": services.scan_manager.jobs(limit=limit)}
 
 

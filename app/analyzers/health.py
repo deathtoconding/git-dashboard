@@ -131,17 +131,29 @@ def working_tree_warnings(repository: dict[str, Any]) -> list[dict[str, Any]]:
     """Detect uncommitted, staged, untracked files and detached HEAD."""
     warnings: list[dict[str, Any]] = []
     if repository.get("detached_head"):
-        warnings.append({"code": "detached_head", "severity": "warning", "message": "HEAD is detached (no branch checked out)."})
+        warnings.append(
+            {"code": "detached_head", "severity": "warning", "message": "HEAD is detached (no branch checked out)."}
+        )
     unstaged = int(repository.get("uncommitted_files") or 0)
     staged = int(repository.get("staged_files") or 0)
     untracked = int(repository.get("untracked_files") or 0)
     if staged:
-        warnings.append({"code": "staged_changes", "severity": "info", "message": f"{staged} staged change(s) not committed."})
+        warnings.append(
+            {"code": "staged_changes", "severity": "info", "message": f"{staged} staged change(s) not committed."}
+        )
     dirty_worktree = max(0, unstaged - untracked - staged)
     if dirty_worktree:
-        warnings.append({"code": "uncommitted_changes", "severity": "warning", "message": f"{dirty_worktree} uncommitted file change(s)."})
+        warnings.append(
+            {
+                "code": "uncommitted_changes",
+                "severity": "warning",
+                "message": f"{dirty_worktree} uncommitted file change(s).",
+            }
+        )
     if untracked:
-        warnings.append({"code": "untracked_files", "severity": "info", "message": f"{untracked} untracked file(s) present."})
+        warnings.append(
+            {"code": "untracked_files", "severity": "info", "message": f"{untracked} untracked file(s) present."}
+        )
     if repository.get("state") == "error":
         warnings.append(
             {"code": "scan_error", "severity": "error", "message": repository.get("last_error") or "Last scan failed."}
@@ -183,14 +195,20 @@ def repository_health(
     # --- activity -------------------------------------------------------
     if days_since is None:
         activity_score = 0.0 if not repository.get("total_commits") else 20.0
-        activity_detail = "No commits found in this repository." if not repository.get("total_commits") else "No commit dates available."
+        activity_detail = (
+            "No commits found in this repository."
+            if not repository.get("total_commits")
+            else "No commit dates available."
+        )
     else:
         activity_score = _interpolate(
             days_since,
             [(0, 100), (7, 100), (30, 80), (90, 45), (180, 20), (365, 5), (1000, 0)],
         )
         activity_detail = f"Last commit {days_since} day(s) ago."
-    signals.append(_signal("activity", "Activity", activity_score, activity_detail, {"days_since_last_commit": days_since}))
+    signals.append(
+        _signal("activity", "Activity", activity_score, activity_detail, {"days_since_last_commit": days_since})
+    )
 
     # --- branch hygiene --------------------------------------------------
     if not local_branches:
@@ -253,14 +271,15 @@ def repository_health(
         ("last scan succeeded", not repository.get("last_error")),
         ("repository has history", bool(repository.get("total_commits"))),
         ("head resolved", bool(repository.get("head_commit"))),
-        ("configured upstream", any(branch.get("upstream") for branch in local_branches) or bool(repository.get("is_bare"))),
+        (
+            "configured upstream",
+            any(branch.get("upstream") for branch in local_branches) or bool(repository.get("is_bare")),
+        ),
     ]
     passed = [name for name, ok in checks if ok]
     failed = [name for name, ok in checks if not ok]
     maintenance_score = round(100 * len(passed) / len(checks), 1)
-    maintenance_detail = (
-        "All maintenance checks passed." if not failed else f"Missing: {', '.join(failed)}."
-    )
+    maintenance_detail = "All maintenance checks passed." if not failed else f"Missing: {', '.join(failed)}."
     signals.append(
         _signal(
             "maintenance",
@@ -426,7 +445,9 @@ def dashboard_insights(store: Store, *, settings: Settings | None = None, limit:
             )
 
     order = {"error": 0, "warning": 1, "info": 2}
-    insights.sort(key=lambda item: (order.get(item.get("severity", "info"), 3), -(item.get("days_since_last_commit") or 0)))
+    insights.sort(
+        key=lambda item: (order.get(item.get("severity", "info"), 3), -(item.get("days_since_last_commit") or 0))
+    )
     return insights[:limit]
 
 

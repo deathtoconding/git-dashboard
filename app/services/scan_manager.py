@@ -194,7 +194,11 @@ class ScanManager:
             return
         job.done = 1
         job.commits_added = outcome.commits_added
-        job.report = {"repositories": [outcome.to_dict()], "scanned": 1 if outcome.status != "failed" else 0, "failed": 1 if outcome.status == "failed" else 0}
+        job.report = {
+            "repositories": [outcome.to_dict()],
+            "scanned": 1 if outcome.status != "failed" else 0,
+            "failed": 1 if outcome.status == "failed" else 0,
+        }
         job.status = outcome.status
         job.error = outcome.error
         job.finished_at = utc_now()

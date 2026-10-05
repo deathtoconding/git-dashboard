@@ -153,11 +153,14 @@ def change_metrics(store: Store, repository_id: int, *, now: datetime | None = N
     totals_year = store.file_change_totals(repository_id, since=iso_days_ago(365, reference))
     totals_month = store.file_change_totals(repository_id, since=iso_days_ago(30, reference))
 
-    commits_row = store.query_one(
-        "SELECT COUNT(*) AS commits, COALESCE(SUM(additions), 0) AS additions, COALESCE(SUM(deletions), 0) AS deletions, "
-        "COALESCE(SUM(files_changed), 0) AS files_changed FROM commits WHERE repository_id = ?",
-        (repository_id,),
-    ) or {}
+    commits_row = (
+        store.query_one(
+            "SELECT COUNT(*) AS commits, COALESCE(SUM(additions), 0) AS additions, COALESCE(SUM(deletions), 0) AS deletions, "
+            "COALESCE(SUM(files_changed), 0) AS files_changed FROM commits WHERE repository_id = ?",
+            (repository_id,),
+        )
+        or {}
+    )
     commits = int(commits_row.get("commits") or 0)
     additions = int(commits_row.get("additions") or 0)
     deletions = int(commits_row.get("deletions") or 0)
@@ -218,10 +221,7 @@ def _bucket_series(daily: dict[str, int], *, days: int, bucket: str, now: dateti
             day = date.fromisoformat(key)
             monday = day - timedelta(days=day.weekday())
             grouped[monday.isoformat()] = grouped.get(monday.isoformat(), 0) + value
-        return [
-            {"bucket": key, "label": f"week of {key}", "commits": value}
-            for key, value in sorted(grouped.items())
-        ]
+        return [{"bucket": key, "label": f"week of {key}", "commits": value} for key, value in sorted(grouped.items())]
     if bucket == "month":
         grouped = {}
         for key, value in buckets.items():
@@ -253,7 +253,9 @@ def heatmap(store: Store, repository_id: int, *, days: int = 365, now: datetime 
     }
 
 
-def contributor_trends(store: Store, repository_id: int, *, weeks: int = 12, now: datetime | None = None) -> list[dict[str, Any]]:
+def contributor_trends(
+    store: Store, repository_id: int, *, weeks: int = 12, now: datetime | None = None
+) -> list[dict[str, Any]]:
     """Weekly contribution counts for the most active contributors (E13-S2)."""
     reference = now or utc_now()
     since = iso_days_ago(weeks * 7, reference)

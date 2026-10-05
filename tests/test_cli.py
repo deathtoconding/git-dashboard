@@ -77,9 +77,7 @@ def test_version_is_declared_in_exactly_one_place() -> None:
     assert match.group(1) == __version__
 
 
-def test_unknown_configuration_key_is_a_configuration_error(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
+def test_unknown_configuration_key_is_a_configuration_error(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     config = tmp_path / "config.json"
     config.write_text('{"not_a_setting": true}\n')
     code, _, err = run(capsys, "--config", str(config), "status")
@@ -98,7 +96,9 @@ def test_read_only_commands_never_write_a_config_file(tmp_path: Path, capsys: py
     assert config.read_text() == original  # read-only commands never rewrite it
 
 
-def test_missing_config_path_uses_defaults_but_says_so(tmp_path: Path, capsys: pytest.CaptureFixture[str], caplog) -> None:
+def test_missing_config_path_uses_defaults_but_says_so(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], caplog
+) -> None:
     missing = tmp_path / "nope.json"
     with caplog.at_level("WARNING", logger="app.config"):
         code, _, _ = run(capsys, "--config", str(missing), "repositories")
@@ -121,7 +121,9 @@ def test_doctor_reports_git_database_and_roots(tmp_path: Path, capsys: pytest.Ca
 def test_scan_and_status_round_trip(repo_factory, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     repo = repo_factory("cli-repo", commits=2)
     config = tmp_path / "config.json"
-    config.write_text(json.dumps({"database_path": str(tmp_path / "d.db"), "repository_roots": [str(tmp_path / "repos")]}))
+    config.write_text(
+        json.dumps({"database_path": str(tmp_path / "d.db"), "repository_roots": [str(tmp_path / "repos")]})
+    )
 
     code, out, _ = run(capsys, "--config", str(config), "add", str(repo))
     assert code == 0
@@ -152,7 +154,9 @@ def test_export_writes_a_json_snapshot(repo_factory, tmp_path: Path, capsys: pyt
     repo = repo_factory("export-repo", commits=2)
     output = tmp_path / "out"
     config = tmp_path / "config.json"
-    config.write_text(json.dumps({"database_path": str(tmp_path / "d.db"), "repository_roots": [str(tmp_path / "repos")]}))
+    config.write_text(
+        json.dumps({"database_path": str(tmp_path / "d.db"), "repository_roots": [str(tmp_path / "repos")]})
+    )
     run(capsys, "--config", str(config), "add", str(repo))
     run(capsys, "--config", str(config), "scan", "--all")
 

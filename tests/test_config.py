@@ -27,7 +27,9 @@ def test_defaults_are_usable(tmp_path: Path) -> None:
 
 def test_config_file_is_read(tmp_path: Path) -> None:
     config = tmp_path / "config.json"
-    config.write_text(json.dumps({"database_path": "custom/path.db", "port": 9123, "repository_roots": ["/tmp/projects"]}))
+    config.write_text(
+        json.dumps({"database_path": "custom/path.db", "port": 9123, "repository_roots": ["/tmp/projects"]})
+    )
     settings = load_settings(config_path=config, environ={})
     assert settings.port == 9123
     assert settings.repository_roots == ["/tmp/projects"]
@@ -97,13 +99,17 @@ def test_paths_are_resolved_against_project_root(tmp_path: Path) -> None:
 
 def test_tilde_paths_expand(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
-    settings = load_settings(config_path=tmp_path / "config.json", environ={}, overrides={"repository_roots": ["~/projects"]})
+    settings = load_settings(
+        config_path=tmp_path / "config.json", environ={}, overrides={"repository_roots": ["~/projects"]}
+    )
     assert settings.resolve_path("~/projects") == (tmp_path / "projects").resolve()
 
 
 def test_save_and_reload_round_trip(tmp_path: Path) -> None:
     settings = load_settings(config_path=tmp_path / "config.json", environ={})
-    updated = settings.with_overrides({"repository_roots": ["/srv/git"], "stale_branch_days": 120, "log_level": "DEBUG"})
+    updated = settings.with_overrides(
+        {"repository_roots": ["/srv/git"], "stale_branch_days": 120, "log_level": "DEBUG"}
+    )
     target = save_settings(updated)
     assert target == tmp_path / "config.json"
     reloaded = load_settings(config_path=target, environ={})

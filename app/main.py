@@ -48,7 +48,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         raise
 
     store = Store(database)
-    collector = GitCollector(GitRunner(binary=settings.git_binary, timeout=settings.git_timeout_seconds), history_depth=settings.history_depth)
+    collector = GitCollector(
+        GitRunner(binary=settings.git_binary, timeout=settings.git_timeout_seconds),
+        history_depth=settings.history_depth,
+    )
     scan_manager = ScanManager(ScanService(store, settings, collector=collector))
     refresh_task: asyncio.Task[Any] | None = None
 

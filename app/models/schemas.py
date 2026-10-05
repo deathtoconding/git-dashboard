@@ -12,7 +12,9 @@ FilterName = Literal["all", "active", "inactive", "stale", "current", "merged", 
 class RepositoryCreate(BaseModel):
     """Register a single local Git repository (E2-S1)."""
 
-    path: str = Field(..., description="Absolute or ~-relative path of a local Git repository", examples=["/home/me/projects/api"])
+    path: str = Field(
+        ..., description="Absolute or ~-relative path of a local Git repository", examples=["/home/me/projects/api"]
+    )
     name: str | None = Field(default=None, description="Optional display name (defaults to the directory name)")
 
 
@@ -45,7 +47,9 @@ class ScanRequest(BaseModel):
 
 class FullScanRequest(BaseModel):
     incremental: bool = Field(default=True)
-    discover: bool = Field(default=True, description="Discover and register repositories under the configured roots first")
+    discover: bool = Field(
+        default=True, description="Discover and register repositories under the configured roots first"
+    )
     root: str | None = Field(default=None, description="Scan a single root instead of every configured root")
     background: bool = Field(default=True)
 

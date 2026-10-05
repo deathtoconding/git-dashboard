@@ -33,7 +33,9 @@ AUTHORS = [
 GIT_AVAILABLE = shutil.which("git") is not None
 
 
-def git(*args: str, cwd: Path | None = None, env: dict[str, str] | None = None, check: bool = True) -> subprocess.CompletedProcess:
+def git(
+    *args: str, cwd: Path | None = None, env: dict[str, str] | None = None, check: bool = True
+) -> subprocess.CompletedProcess:
     environment = dict(os.environ)
     environment.update(GIT_ENV)
     if env:
@@ -123,7 +125,13 @@ def make_repo(
     if bare:
         # A bare repository needs history pushed into it from a working clone.
         source = path.parent / f"{path.name}-source"
-        make_repo(source, commits=commits, days_ago=days_ago, commit_span_days=commit_span_days, author_rotation=author_rotation)
+        make_repo(
+            source,
+            commits=commits,
+            days_ago=days_ago,
+            commit_span_days=commit_span_days,
+            author_rotation=author_rotation,
+        )
         git("remote", "add", "origin", str(path), cwd=source)
         git("push", "-u", "origin", "main", cwd=source)
         git("symbolic-ref", "HEAD", "refs/heads/main", cwd=path)
@@ -141,7 +149,10 @@ def make_repo(
             f"commit {index + 1}",
             when=when,
             author=author,
-            files={f"src/module_{index}.py": f"# module {index}\nvalue = {index}\n", "README.md": f"# {path.name}\n\niteration {index}\n"},
+            files={
+                f"src/module_{index}.py": f"# module {index}\nvalue = {index}\n",
+                "README.md": f"# {path.name}\n\niteration {index}\n",
+            },
         )
 
     if dirty:

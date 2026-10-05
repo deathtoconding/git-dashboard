@@ -61,7 +61,9 @@ def collect_commits(
         result = runner.run(incremental_args, cwd=path, timeout=effective_timeout)
         if not result.ok:
             # The recorded SHA may have been rewritten or garbage collected - retry from scratch.
-            log.warning("incremental log failed for %s (%s); falling back to a full walk", path, result.failure_reason())
+            log.warning(
+                "incremental log failed for %s (%s); falling back to a full walk", path, result.failure_reason()
+            )
             batch.warnings.append(f"incremental walk failed, performed a full walk instead ({result.failure_reason()})")
             result = runner.run(args + ["--all"], cwd=path, timeout=effective_timeout)
     else:

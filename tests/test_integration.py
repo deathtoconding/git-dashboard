@@ -95,7 +95,9 @@ def test_scan_picks_up_new_commits_and_branches(scanner, repositories, store, re
     assert store.get_repository(repository_id)["total_commits"] == 5
 
 
-def test_one_broken_repository_does_not_stop_the_scan(scanner, repositories, store, repo_factory, tmp_path: Path) -> None:
+def test_one_broken_repository_does_not_stop_the_scan(
+    scanner, repositories, store, repo_factory, tmp_path: Path
+) -> None:
     """E9-S2 acceptance criteria: a single failure must not abort the whole scan."""
     repo_factory("good-one", commits=2)
     broken = repo_factory("broken", commits=2)
@@ -174,7 +176,10 @@ def test_deleting_a_repository_removes_all_related_rows(scanner, repositories, s
     repositories.remove(repository_id)
     assert store.count_repositories() == 0
     for table in ("branches", "commits", "contributors", "file_changes"):
-        assert store.query(f"SELECT COUNT(*) AS total FROM {table} WHERE repository_id = ?", (repository_id,))[0]["total"] == 0
+        assert (
+            store.query(f"SELECT COUNT(*) AS total FROM {table} WHERE repository_id = ?", (repository_id,))[0]["total"]
+            == 0
+        )
 
 
 def test_api_reflects_a_complete_workflow(client, repo_factory, tmp_path: Path) -> None:
@@ -182,7 +187,9 @@ def test_api_reflects_a_complete_workflow(client, repo_factory, tmp_path: Path) 
     repo = repo_factory("workflow", commits=5, author_rotation=True)
 
     # 1. discover + register
-    discovery = client.post("/api/repositories/discover", json={"root": str(tmp_path / "repos"), "register": True}).json()
+    discovery = client.post(
+        "/api/repositories/discover", json={"root": str(tmp_path / "repos"), "register": True}
+    ).json()
     assert discovery["registered_count"] == 1
     repository = client.get("/api/repositories").json()["items"][0]
 

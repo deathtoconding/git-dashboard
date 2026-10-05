@@ -96,7 +96,14 @@ class Store:
         payload["state"] = payload.get("state") or "unknown"
         for boolean_column in ("is_bare", "is_dirty", "detached_head"):
             payload[boolean_column] = int(bool(payload.get(boolean_column) or 0))
-        for numeric in ("uncommitted_files", "staged_files", "untracked_files", "total_commits", "tracked_files", "branch_count"):
+        for numeric in (
+            "uncommitted_files",
+            "staged_files",
+            "untracked_files",
+            "total_commits",
+            "tracked_files",
+            "branch_count",
+        ):
             payload[numeric] = int(payload.get(numeric) or 0)
         payload["health_score"] = float(payload.get("health_score") or 0.0)
         payload["health_grade"] = payload.get("health_grade") or "F"
@@ -167,7 +174,9 @@ class Store:
             cursor = connection.execute("DELETE FROM repositories WHERE id = ?", (repository_id,))
             return cursor.rowcount > 0
 
-    def set_repository_error(self, repository_id: int, error: str | None, *, conn: sqlite3.Connection | None = None) -> None:
+    def set_repository_error(
+        self, repository_id: int, error: str | None, *, conn: sqlite3.Connection | None = None
+    ) -> None:
         state = "error" if error else "ok"
         self.execute(
             "UPDATE repositories SET last_error = ?, state = CASE WHEN ? IS NULL THEN state ELSE ? END, updated_at = ? WHERE id = ?",
@@ -180,8 +189,9 @@ class Store:
         return int(row["total"]) if row else 0
 
     def repository_summary(self, *, conn: sqlite3.Connection | None = None) -> dict[str, Any]:
-        row = self.query_one(
-            """
+        row = (
+            self.query_one(
+                """
             SELECT
                 COUNT(*)                                        AS repositories,
                 COALESCE(SUM(uncommitted_files), 0)             AS uncommitted_files,
@@ -198,9 +208,13 @@ class Store:
                 COALESCE(AVG(CASE WHEN last_scanned_at IS NOT NULL THEN health_score END), 0) AS average_health
             FROM repositories
             """,
-            conn=conn,
-        ) or {}
-        contributors = self.query_one("SELECT COUNT(DISTINCT email) AS total FROM contributors WHERE email <> ''", conn=conn)
+                conn=conn,
+            )
+            or {}
+        )
+        contributors = self.query_one(
+            "SELECT COUNT(DISTINCT email) AS total FROM contributors WHERE email <> ''", conn=conn
+        )
         row["contributors"] = int(contributors["total"]) if contributors else 0
         return row
 
@@ -216,7 +230,9 @@ class Store:
         return int(row["total"]) if row else 0
 
     # ----------------------------------------------------------------- branches
-    def replace_branches(self, repository_id: int, branches: Iterable[dict[str, Any]], *, conn: sqlite3.Connection | None = None) -> int:
+    def replace_branches(
+        self, repository_id: int, branches: Iterable[dict[str, Any]], *, conn: sqlite3.Connection | None = None
+    ) -> int:
         now = utc_now()
         rows = list(branches)
         with self.db.connection(conn) as connection:
@@ -279,7 +295,9 @@ class Store:
         sql += " ORDER BY is_current DESC, is_remote ASC, last_commit_at DESC"
         return self.query(sql, params, conn=conn)
 
-    def all_branches(self, *, branch_filter: str = "all", search: str | None = None, conn: sqlite3.Connection | None = None) -> list[dict]:
+    def all_branches(
+        self, *, branch_filter: str = "all", search: str | None = None, conn: sqlite3.Connection | None = None
+    ) -> list[dict]:
         """Branches across every repository (used by the global Branches view)."""
         sql = """
             SELECT b.*, r.name AS repository_name, r.path AS repository_path
@@ -357,7 +375,9 @@ class Store:
             return None
         if len(candidate) == 40:
             exact = self.query_one(
-                "SELECT * FROM commits WHERE repository_id = ? AND sha = ? LIMIT 1", (repository_id, candidate), conn=conn
+                "SELECT * FROM commits WHERE repository_id = ? AND sha = ? LIMIT 1",
+                (repository_id, candidate),
+                conn=conn,
             )
             if exact:
                 return exact
@@ -413,7 +433,9 @@ class Store:
         )
         return rows, total
 
-    def count_commits(self, repository_id: int, *, since: str | None = None, until: str | None = None, conn=None) -> int:
+    def count_commits(
+        self, repository_id: int, *, since: str | None = None, until: str | None = None, conn=None
+    ) -> int:
         sql = "SELECT COUNT(*) AS total FROM commits WHERE repository_id = ?"
         params: list[Any] = [repository_id]
         if since:
@@ -479,7 +501,9 @@ class Store:
             params.append(since)
         return self.query(sql, params, conn=conn)
 
-    def contributor_totals(self, repository_id: int | None = None, *, since: str | None = None, conn=None) -> list[dict]:
+    def contributor_totals(
+        self, repository_id: int | None = None, *, since: str | None = None, conn=None
+    ) -> list[dict]:
         sql = """
             SELECT author_email AS email, author_name AS name, COUNT(*) AS commits,
                    MAX(authored_at) AS last_commit_at
@@ -516,7 +540,9 @@ class Store:
         self, repository_id: int, sha: str, changes: Sequence[dict[str, Any]], *, conn=None
     ) -> int:
         with self.db.connection(conn) as connection:
-            connection.execute("DELETE FROM file_changes WHERE repository_id = ? AND commit_sha = ?", (repository_id, sha))
+            connection.execute(
+                "DELETE FROM file_changes WHERE repository_id = ? AND commit_sha = ?", (repository_id, sha)
+            )
             connection.executemany(
                 """
                 INSERT OR REPLACE INTO file_changes (repository_id, commit_sha, path, change_type, additions, deletions)
@@ -644,7 +670,17 @@ class Store:
                    repositories_scanned = ?, repositories_failed = ?, error = ?
              WHERE id = ?
             """,
-            (status, utc_now(), duration_ms, records_processed, commits_added, repositories_scanned, repositories_failed, error, scan_id),
+            (
+                status,
+                utc_now(),
+                duration_ms,
+                records_processed,
+                commits_added,
+                repositories_scanned,
+                repositories_failed,
+                error,
+                scan_id,
+            ),
             conn=conn,
         )
 
@@ -652,14 +688,18 @@ class Store:
         return self.query_one("SELECT * FROM scan_runs WHERE id = ?", (scan_id,), conn=conn)
 
     def list_scan_runs(self, *, limit: int = 20, repository_id: int | None = None, conn=None) -> list[dict]:
-        sql = "SELECT s.*, r.name AS repository_name FROM scan_runs s LEFT JOIN repositories r ON r.id = s.repository_id"
+        sql = (
+            "SELECT s.*, r.name AS repository_name FROM scan_runs s LEFT JOIN repositories r ON r.id = s.repository_id"
+        )
         params: list[Any] = []
         if repository_id is not None:
             sql += " WHERE s.repository_id = ?"
             params.append(repository_id)
         # Aggregate "scan everything" runs (repository_id IS NULL) are the summary a
         # user looks for first, so they lead the history; the rest is newest first.
-        sql += " ORDER BY (s.repository_id IS NULL) DESC, COALESCE(s.completed_at, s.started_at) DESC, s.id DESC LIMIT ?"
+        sql += (
+            " ORDER BY (s.repository_id IS NULL) DESC, COALESCE(s.completed_at, s.started_at) DESC, s.id DESC LIMIT ?"
+        )
         params.append(int(limit))
         return self.query(sql, params, conn=conn)
 

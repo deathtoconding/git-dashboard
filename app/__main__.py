@@ -40,7 +40,9 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     # Shared flags so they work both before and after the subcommand
     # (``--json status`` and ``status --json``).
     common = argparse.ArgumentParser(add_help=False)
-    common.add_argument("--json", action="store_true", default=argparse.SUPPRESS, help="Machine readable output where supported")
+    common.add_argument(
+        "--json", action="store_true", default=argparse.SUPPRESS, help="Machine readable output where supported"
+    )
 
     parser = argparse.ArgumentParser(
         prog="git-dashboard",
@@ -76,13 +78,17 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     add.add_argument("path", help="Path of the Git repository")
     add.add_argument("--name", help="Display name")
 
-    remove = subparsers.add_parser("remove", parents=[common], help="Unregister a repository and delete its collected data")
+    remove = subparsers.add_parser(
+        "remove", parents=[common], help="Unregister a repository and delete its collected data"
+    )
     remove.add_argument("repository_id", type=int)
 
     scan = subparsers.add_parser("scan", parents=[common], help="Scan one or all repositories")
     scan.add_argument("repository_id", nargs="?", type=int, help="Repository id (omit with --all)")
     scan.add_argument("--all", action="store_true", help="Scan every registered repository")
-    scan.add_argument("--full-history", action="store_true", help="Re-walk the full history instead of only new commits")
+    scan.add_argument(
+        "--full-history", action="store_true", help="Re-walk the full history instead of only new commits"
+    )
     scan.add_argument("--discover", action="store_true", help="Discover and register repositories before scanning")
 
     subparsers.add_parser("repositories", parents=[common], help="List registered repositories")
@@ -90,7 +96,9 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     subparsers.add_parser("insights", parents=[common], help="Show actionable recommendations")
     subparsers.add_parser("doctor", parents=[common], help="Check Git, configuration and database state")
 
-    export = subparsers.add_parser("export", parents=[common], help="Export data (JSON snapshot, CSV tables, SQLite backup)")
+    export = subparsers.add_parser(
+        "export", parents=[common], help="Export data (JSON snapshot, CSV tables, SQLite backup)"
+    )
     export.add_argument("--format", choices=["json", "csv", "backup"], default="json")
     export.add_argument("--out", help="Output directory (default: data/exports)")
     export.add_argument("--repository-id", type=int, help="Limit the export to a single repository")
@@ -143,7 +151,9 @@ def cmd_start(args: argparse.Namespace, settings: Settings) -> int:
             report = scan_service.scan_all(incremental=True, discover=bool(settings.repository_roots))
             for outcome in report.outcomes:
                 marker = "ok" if outcome.status != "failed" else "FAILED"
-                print(f"  [{marker}] {outcome.name}: {outcome.commits_added} commit(s){'' if not outcome.error else ' - ' + outcome.error}")
+                print(
+                    f"  [{marker}] {outcome.name}: {outcome.commits_added} commit(s){'' if not outcome.error else ' - ' + outcome.error}"
+                )
         elif not available:
             print("Warning: Git was not found - repositories cannot be scanned until it is installed.", file=sys.stderr)
 
@@ -159,7 +169,14 @@ def cmd_start(args: argparse.Namespace, settings: Settings) -> int:
         with contextlib.suppress(Exception):  # pragma: no cover - headless environments
             webbrowser.open(url)
     if args.reload:
-        uvicorn.run("app.main:create_app", factory=True, host=settings.host, port=settings.port, reload=True, log_level=settings.log_level.lower())
+        uvicorn.run(
+            "app.main:create_app",
+            factory=True,
+            host=settings.host,
+            port=settings.port,
+            reload=True,
+            log_level=settings.log_level.lower(),
+        )
     else:
         uvicorn.run(app, host=settings.host, port=settings.port, log_level=settings.log_level.lower())
     return 0
@@ -177,7 +194,9 @@ def cmd_discover(args: argparse.Namespace, settings: Settings) -> int:
         return 0
     total = 0
     for discovery in result["roots"]:
-        print(f"\n{discovery['root']}  ({discovery['count']} repositories, {discovery['visited_dirs']} directories visited)")
+        print(
+            f"\n{discovery['root']}  ({discovery['count']} repositories, {discovery['visited_dirs']} directories visited)"
+        )
         for repository in discovery["repositories"]:
             marker = "registered" if repository["already_registered"] else "new"
             print(f"  [{marker:>10}] {repository['path']}")
@@ -221,7 +240,10 @@ def cmd_scan(args: argparse.Namespace, settings: Settings) -> int:
     store, scan_service, _ = bootstrap(settings)
     available, version = scan_service.git_available()
     if not available:
-        print(f"error: Git executable {settings.git_binary!r} was not found. Install Git or set 'git_binary'.", file=sys.stderr)
+        print(
+            f"error: Git executable {settings.git_binary!r} was not found. Install Git or set 'git_binary'.",
+            file=sys.stderr,
+        )
         return 3
     print(f"Using git {version}")
 
@@ -229,9 +251,13 @@ def cmd_scan(args: argparse.Namespace, settings: Settings) -> int:
         if store.count_repositories() == 0:
             print("No repositories registered.")
             if settings.repository_roots:
-                print("Tip: run 'python -m app discover --register' to register repositories under your configured roots.")
+                print(
+                    "Tip: run 'python -m app discover --register' to register repositories under your configured roots."
+                )
             else:
-                print("Tip: register one with 'python -m app add <path>' or configure 'repository_roots' in config.json.")
+                print(
+                    "Tip: register one with 'python -m app add <path>' or configure 'repository_roots' in config.json."
+                )
             return 0
         report = scan_service.scan_all(incremental=not args.full_history, discover=args.discover)
         for outcome in report.outcomes:
@@ -241,7 +267,9 @@ def cmd_scan(args: argparse.Namespace, settings: Settings) -> int:
             print(line)
             for warning in outcome.warnings:
                 print(f"               warning: {warning}")
-        print(f"\n{report.scanned} scanned, {report.failed} failed, {report.commits_added} commits added in {report.duration_ms}ms")
+        print(
+            f"\n{report.scanned} scanned, {report.failed} failed, {report.commits_added} commits added in {report.duration_ms}ms"
+        )
         return 0 if report.failed == 0 else 1
 
     if args.discover:
@@ -250,8 +278,12 @@ def cmd_scan(args: argparse.Namespace, settings: Settings) -> int:
         print(f"{report.scanned} scanned, {report.failed} failed, {report.commits_added} commits added")
         return 0 if report.failed == 0 else 1
 
-    outcome = scan_service.scan_repository(args.repository_id, incremental=not args.full_history, full_history=args.full_history)
-    print(f"  [{outcome.status}] {outcome.name}: {outcome.commits_added} new commit(s), {outcome.records_processed} records in {outcome.duration_ms}ms")
+    outcome = scan_service.scan_repository(
+        args.repository_id, incremental=not args.full_history, full_history=args.full_history
+    )
+    print(
+        f"  [{outcome.status}] {outcome.name}: {outcome.commits_added} new commit(s), {outcome.records_processed} records in {outcome.duration_ms}ms"
+    )
     for warning in outcome.warnings:
         print(f"          warning: {warning}")
     if outcome.error:
@@ -268,7 +300,9 @@ def cmd_repositories(args: argparse.Namespace, settings: Settings) -> int:
     if not rows:
         print("No repositories registered yet.")
         return 0
-    print(f"{'ID':>4}  {'NAME':<28} {'BRANCH':<18} {'COMMITS':>8} {'CHANGES':>8} {'HEALTH':>6}  {'LAST COMMIT':<20} PATH")
+    print(
+        f"{'ID':>4}  {'NAME':<28} {'BRANCH':<18} {'COMMITS':>8} {'CHANGES':>8} {'HEALTH':>6}  {'LAST COMMIT':<20} PATH"
+    )
     for row in rows:
         print(
             f"{row['id']:>4}  {row['name'][:28]:<28} {(row.get('current_branch') or '-')[:18]:<18} "
@@ -300,13 +334,23 @@ def cmd_status(args: argparse.Namespace, settings: Settings) -> int:
         return 0
     print(f"git-dashboard {__version__}")
     print(f"Git          : {'available (' + str(version) + ')' if available else 'NOT AVAILABLE'}")
-    print(f"Database     : {settings.database_file} ({store.db.size_bytes()} bytes, schema v{store.db.current_version()})")
-    print(f"Repositories : {summary.get('repositories', 0)} | commits {summary.get('total_commits', 0)} | branches {summary.get('branches', 0)} | contributors {summary.get('contributors', 0)}")
-    print(f"Changes      : {summary.get('uncommitted_files', 0)} uncommitted file(s) across {summary.get('dirty_repositories', 0)} repository(ies)")
-    print(f"Stale        : {summary.get('stale_repositories', 0)} repository(ies), {store.count_stale_branches()} stale branch(es)")
+    print(
+        f"Database     : {settings.database_file} ({store.db.size_bytes()} bytes, schema v{store.db.current_version()})"
+    )
+    print(
+        f"Repositories : {summary.get('repositories', 0)} | commits {summary.get('total_commits', 0)} | branches {summary.get('branches', 0)} | contributors {summary.get('contributors', 0)}"
+    )
+    print(
+        f"Changes      : {summary.get('uncommitted_files', 0)} uncommitted file(s) across {summary.get('dirty_repositories', 0)} repository(ies)"
+    )
+    print(
+        f"Stale        : {summary.get('stale_repositories', 0)} repository(ies), {store.count_stale_branches()} stale branch(es)"
+    )
     latest = store.latest_scan_run()
     if latest:
-        print(f"Last scan    : {latest['started_at']} [{latest['status']}] {latest.get('commits_added') or 0} commit(s){' - ' + (latest.get('error') or '') if latest.get('error') else ''}")
+        print(
+            f"Last scan    : {latest['started_at']} [{latest['status']}] {latest.get('commits_added') or 0} commit(s){' - ' + (latest.get('error') or '') if latest.get('error') else ''}"
+        )
     else:
         print("Last scan    : never - run 'python -m app scan --all'")
     return 0
@@ -380,20 +424,26 @@ def cmd_doctor(args: argparse.Namespace, settings: Settings) -> int:
     print(f"git-dashboard {__version__}\n")
 
     available, version = scan_service.git_available()
-    print(f"[{'ok' if available else '!!'}] Git          : {settings.git_binary} {'v' + str(version) if version else 'NOT FOUND'}")
+    print(
+        f"[{'ok' if available else '!!'}] Git          : {settings.git_binary} {'v' + str(version) if version else 'NOT FOUND'}"
+    )
     if not available:
         problems.append("Git is not available - discovery and scanning will fail.")
 
     try:
         settings.database_file.parent.mkdir(parents=True, exist_ok=True)
-        print(f"[ok] Database     : {settings.database_file} (schema v{store.db.current_version()}, {store.db.size_bytes()} bytes)")
+        print(
+            f"[ok] Database     : {settings.database_file} (schema v{store.db.current_version()}, {store.db.size_bytes()} bytes)"
+        )
     except OSError as exc:
         problems.append(f"Database path is not writable: {exc}")
         print(f"[!!] Database     : {settings.database_file} - {exc}")
 
     if settings.config_path:
         exists = settings.config_path.exists()
-        print(f"[{'ok' if exists else '--'}] Config file   : {settings.config_path}{'' if exists else ' (not created yet, defaults are in use)'}")
+        print(
+            f"[{'ok' if exists else '--'}] Config file   : {settings.config_path}{'' if exists else ' (not created yet, defaults are in use)'}"
+        )
 
     if not settings.repository_roots:
         problems.append("No repository_roots configured - automatic discovery is disabled (manual 'add' still works).")
@@ -407,7 +457,9 @@ def cmd_doctor(args: argparse.Namespace, settings: Settings) -> int:
 
     suggestions = repository_service.suggestions(limit=10) if settings.repository_roots else []
     registered = store.count_repositories()
-    print(f"[ok] Repositories : {registered} registered, {len(suggestions) if suggestions else 0} unregistered under the configured roots")
+    print(
+        f"[ok] Repositories : {registered} registered, {len(suggestions) if suggestions else 0} unregistered under the configured roots"
+    )
 
     if problems:
         print("\nIssues found:")

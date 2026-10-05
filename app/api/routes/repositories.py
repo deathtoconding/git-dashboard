@@ -28,7 +28,9 @@ def _enrich(repository: dict[str, Any], services: Services) -> dict[str, Any]:
     reference = datetime.now(timezone.utc)
     last_dt = parse_timestamp(repository.get("last_commit_at"))
     days_since = (reference - last_dt).days if last_dt else None
-    staleness = repository_staleness(repository, days_since_last_commit=days_since, settings=services.settings, now=reference)
+    staleness = repository_staleness(
+        repository, days_since_last_commit=days_since, settings=services.settings, now=reference
+    )
     scan_dt = parse_timestamp(repository.get("last_scanned_at"))
     return {
         **repository,
@@ -52,15 +54,15 @@ def list_repositories(
         default="all", alias="status"
     ),
     staleness: Literal["all", "active", "inactive", "stale", "abandoned", "empty", "unknown"] = Query(default="all"),
-    sort: Literal["name", "last_commit", "commits", "branches", "changes", "scanned", "health"] = Query(default="last_commit"),
+    sort: Literal["name", "last_commit", "commits", "branches", "changes", "scanned", "health"] = Query(
+        default="last_commit"
+    ),
     order: Literal["asc", "desc"] = Query(default="desc"),
     page: int = Query(default=1, ge=1),
     per_page: int = Query(default=25, ge=1, le=200),
     services: Services = Depends(get_services),
 ) -> dict[str, Any]:
-    total = len(
-        services.store.list_repositories(search=search, status=status_filter, staleness=staleness)
-    )
+    total = len(services.store.list_repositories(search=search, status=status_filter, staleness=staleness))
     rows = services.store.list_repositories(
         search=search,
         status=status_filter,

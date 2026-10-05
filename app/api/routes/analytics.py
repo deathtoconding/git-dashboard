@@ -53,7 +53,9 @@ def activity(
     }
 
 
-@router.get("/repositories/{repository_id}/contributors", summary="Contributors with commit and line statistics (E3-S5, E8-S4)")
+@router.get(
+    "/repositories/{repository_id}/contributors", summary="Contributors with commit and line statistics (E3-S5, E8-S4)"
+)
 def contributors(
     repository: dict[str, Any] = Depends(get_repository),
     services: Services = Depends(get_services),

@@ -198,7 +198,9 @@ class ScanService:
 
         repo_log = get_repo_logger("services.scan", repository)
         scan_id = self.store.start_scan_run(kind or ("incremental" if incremental else "single"), repository_id)
-        outcome = ScanOutcome(repository_id=repository_id, name=repository["name"], path=repository["path"], scan_id=scan_id)
+        outcome = ScanOutcome(
+            repository_id=repository_id, name=repository["name"], path=repository["path"], scan_id=scan_id
+        )
         started = time.perf_counter()
         path = Path(repository["path"])
 
