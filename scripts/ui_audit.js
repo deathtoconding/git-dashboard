@@ -7,7 +7,7 @@
  * state, modal focus handling, theme cycling, keyboard shortcuts, persisted
  * view state and that every interactive control has an accessible name. It also
  * checks the narrative layer (briefing tone/headline/lines, 'Do this first',
- * severity-grouped findings). The last
+ * severity-grouped findings) and that the triage presets really filter. The last
  * step clicks "Scan all repositories" and waits for progress, the toast and the
  * reset button, so it does run a real (fast, incremental) scan.
  *
@@ -128,6 +128,27 @@ function accessibleName(el) {
   check(doc.querySelectorAll("#view .meter").length >= expectedRepositories, "repositories: health meters missing");
   check(!doc.querySelector("#view .card"), "repositories: legacy .card markup still present");
 
+  const presetChips = doc.querySelectorAll("#view [data-preset]");
+  check(presetChips.length === 5, `repositories: expected 5 triage presets, found ${presetChips.length}`);
+  const everything = [...presetChips].find((chip) => chip.dataset.preset === "all");
+  check(everything.getAttribute("aria-pressed") === "true", "repositories: the default preset is not marked active");
+  const uncommittedChip = [...presetChips].find((chip) => chip.dataset.preset === "uncommitted");
+  uncommittedChip.click();
+  await sleep(1500);
+  const dirtyRows = doc.querySelectorAll("#view table tbody tr").length;
+  check(dirtyRows < rows.length, `repositories: 'Uncommitted' preset did not narrow the list (${dirtyRows} vs ${rows.length})`);
+  check(
+    JSON.parse(window.localStorage.getItem("git-dashboard-state-v1")).repoFilters.status === "dirty",
+    "repositories: preset did not persist its filter"
+  );
+  doc.querySelector("#view [data-preset='all']").click();
+  await sleep(1500);
+  check(
+    doc.querySelectorAll("#view table tbody tr").length === rows.length,
+    "repositories: returning to the 'Everything' preset did not restore the list"
+  );
+  notes.push(`presets: ${rows.length} rows -> ${dirtyRows} dirty -> back`);
+
   // --- theme cycle light -> dark -> system
   const themeButton = doc.getElementById("theme-toggle");
   const seen = new Set();
@@ -247,7 +268,7 @@ function accessibleName(el) {
   check(doc.querySelector("#scan-status .state-dot").className === "state-dot state-dot--ok", "scan: indicator did not settle on ok");
   notes.push(`scan progress indicator seen: ${sawProgress || "completed before the first poll"}`);
 
-  const result = { errors, notes, expectedRepositories, audits: 8 };
+  const result = { errors, notes, expectedRepositories, audits: 9 };
   console.log(JSON.stringify(result, null, 2));
   window.close();
   process.exit(errors.length ? 1 : 0);

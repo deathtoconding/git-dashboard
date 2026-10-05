@@ -467,6 +467,23 @@
 
   /* ------------------------------------------------------------ repositories */
 
+  /** Triage presets: one click turns "something feels wrong" into a filtered list. */
+  const PRESETS = [
+    { key: "all", label: "Everything", patch: { status: "all", staleness: "all", sort: "last_commit", order: "desc" } },
+    { key: "needs_work", label: "Needs work", patch: { status: "all", staleness: "all", sort: "health", order: "asc" } },
+    { key: "uncommitted", label: "Uncommitted", patch: { status: "dirty", staleness: "all", sort: "changes", order: "desc" } },
+    { key: "neglected", label: "Neglected", patch: { status: "all", staleness: "stale", sort: "last_commit", order: "asc" } },
+    { key: "clean", label: "Clean", patch: { status: "clean", staleness: "all", sort: "last_commit", order: "desc" } },
+  ];
+
+  function activePreset(filters) {
+    return (
+      PRESETS.find((preset) =>
+        Object.entries(preset.patch).every(([key, value]) => String(filters[key]) === String(value))
+      ) || null
+    );
+  }
+
   async function repositories(root, ctx) {
     const filters = ctx.state.repoFilters;
     const perPage = 25;
@@ -487,7 +504,15 @@
 
     root.innerHTML = `
       <section class="panel">
-        <div class="toolbar toolbar--between">
+        <div class="chips" role="group" aria-label="Triage presets">
+          ${PRESETS.map(
+            (preset) =>
+              `<button type="button" class="chip" data-preset="${preset.key}" aria-pressed="${String(
+                activePreset(filters) ? activePreset(filters).key === preset.key : false
+              )}">${esc(preset.label)}</button>`
+          ).join("")}
+        </div>
+        <div class="toolbar toolbar--between mt-12">
           <div class="toolbar">
             <div class="field search" style="min-width:230px">
               <label for="filter-search">Search</label>
@@ -569,6 +594,14 @@
     root.querySelectorAll("[data-order]").forEach((button) => {
       button.addEventListener("click", () => {
         ctx.state.repoFilters.order = button.dataset.order;
+        applyFilters();
+      });
+    });
+    root.querySelectorAll("[data-preset]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const preset = PRESETS.find((candidate) => candidate.key === button.dataset.preset);
+        if (!preset) return;
+        Object.assign(ctx.state.repoFilters, preset.patch);
         applyFilters();
       });
     });
