@@ -61,6 +61,26 @@ def test_init_config_honours_cli_overrides(tmp_path: Path, capsys: pytest.Captur
     assert json.loads(config.read_text())["database_path"] == str(database)
 
 
+def test_global_flags_work_before_and_after_the_subcommand(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """`--config/--database/--log-level/--json` must not care about their position."""
+    config = tmp_path / "config.json"
+    config.write_text(json.dumps({"database_path": str(tmp_path / "d.db")}))
+
+    before_code, before_out, _ = run(capsys, "--config", str(config), "--json", "status")
+    after_code, after_out, _ = run(capsys, "status", "--config", str(config), "--json")
+    assert before_code == after_code == 0
+    assert (
+        json.loads(before_out)["database"]["path"]
+        == json.loads(after_out)["database"]["path"]
+        == str(tmp_path / "d.db")
+    )
+
+    database = tmp_path / "override.db"
+    code, out, _ = run(capsys, "status", "--database", str(database), "--json")
+    assert code == 0
+    assert json.loads(out)["database"]["path"] == str(database)
+
+
 # --------------------------------------------------------------------- plumbing
 def test_version_flag(capsys: pytest.CaptureFixture[str]) -> None:
     with pytest.raises(SystemExit) as excinfo:

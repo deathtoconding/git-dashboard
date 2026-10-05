@@ -38,10 +38,16 @@ log = get_logger("__main__")
 # --------------------------------------------------------------------- helpers
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     # Shared flags so they work both before and after the subcommand
-    # (``--json status`` and ``status --json``).
+    # (``--config x.json status`` as well as ``status --config x.json``).
+    # SUPPRESS keeps the value parsed before the subcommand intact.
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument(
         "--json", action="store_true", default=argparse.SUPPRESS, help="Machine readable output where supported"
+    )
+    common.add_argument("--config", default=argparse.SUPPRESS, help="Path to config.json (defaults to ./config.json)")
+    common.add_argument("--database", default=argparse.SUPPRESS, help="Override the SQLite database path")
+    common.add_argument(
+        "--log-level", default=argparse.SUPPRESS, help="Override the log level (DEBUG/INFO/WARNING/ERROR)"
     )
 
     parser = argparse.ArgumentParser(
