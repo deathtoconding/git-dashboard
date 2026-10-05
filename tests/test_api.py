@@ -407,6 +407,20 @@ def test_openapi_schema_is_valid(client) -> None:
         assert expected in paths
 
 
+# ------------------------------------------------------------------- startup
+def test_startup_reports_the_git_version(settings, caplog) -> None:
+    """The server probes Git once at boot so no request has to spawn a process."""
+    from fastapi.testclient import TestClient
+
+    from app.main import create_app
+
+    with caplog.at_level("INFO", logger="app.main"):
+        with TestClient(create_app(settings)) as client:
+            assert client.get("/api/health").status_code == 200
+    messages = [record.getMessage() for record in caplog.records if record.name == "app.main"]
+    assert any("| git: git" in message for message in messages), messages
+
+
 # --------------------------------------------------------- architectural rules
 def test_request_handlers_never_spawn_processes() -> None:
     """Architecture rule (E1): Git is invoked by collectors, never by a route.

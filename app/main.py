@@ -55,11 +55,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         nonlocal refresh_task
+        # Probe Git once at startup: the result is cached on the runner, so no
+        # request handler ever has to spawn a process (see docs/architecture.md).
+        git_available, git_version = await asyncio.to_thread(collector.check_git)
         log.info("dashboard ready on http://%s:%s (database: %s)", settings.host, settings.port, settings.database_file)
         log.info(
             "registered repositories: %d | git: %s",
             store.count_repositories(),
-            settings.git_binary,
+            f"{settings.git_binary} {git_version}" if git_available else f"{settings.git_binary} (NOT AVAILABLE)",
         )
         if settings.refresh_interval_minutes > 0:
             refresh_task = asyncio.create_task(_auto_refresh(app, settings.refresh_interval_minutes))
