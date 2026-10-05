@@ -65,6 +65,7 @@
     insights: (limit) => api.get(`/insights?limit=${limit || 25}`),
     activity: (days, bucket, repositoryId) =>
       api.get(`/activity?days=${days}&bucket=${bucket || "day"}${repositoryId ? `&repository_id=${repositoryId}` : ""}`),
+    activityByRepository: (days, bucket) => api.get(`/activity/repositories?days=${days}&bucket=${bucket || "day"}`),
     settings: () => api.get("/settings"),
     saveSettings: (body) => api.put("/settings", body),
     exportJson: (repositoryId) => api.get(`/export/json${repositoryId ? `?repository_id=${repositoryId}` : ""}`),
@@ -74,21 +75,46 @@
     snapshot: () => api.post("/export/snapshot"),
   };
 
-  /* ------------------------------------------------------------- formatting */
+  /* ------------------------------------------------------------- numbers --- */
   const numberFormat = new Intl.NumberFormat();
+  const compactFormat = new Intl.NumberFormat(undefined, { notation: "compact", maximumFractionDigits: 1 });
 
   function fmtNumber(value) {
     if (value === null || value === undefined || value === "") return "0";
-    return numberFormat.format(Math.round(Number(value)));
+    const number = Number(value);
+    if (!Number.isFinite(number)) return String(value);
+    return numberFormat.format(Math.abs(number) < 1 && number !== 0 ? number : Math.round(number));
+  }
+
+  function fmtCompact(value) {
+    const number = Number(value || 0);
+    if (!Number.isFinite(number)) return "0";
+    return Math.abs(number) >= 10000 ? compactFormat.format(number) : fmtNumber(number);
+  }
+
+  function fmtDecimal(value, digits) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return "0";
+    return number.toFixed(digits === undefined ? 1 : digits);
+  }
+
+  function fmtPercent(value, digits) {
+    return `${fmtDecimal(value, digits === undefined ? 0 : digits)}%`;
+  }
+
+  function fmtSigned(value) {
+    const number = Number(value) || 0;
+    return `${number > 0 ? "+" : ""}${fmtNumber(number)}`;
   }
 
   function fmtDuration(days) {
     if (days === null || days === undefined) return "never";
-    if (days === 0) return "today";
-    if (days === 1) return "yesterday";
-    if (days < 30) return `${days} days ago`;
-    if (days < 365) return `${Math.round(days / 30)} mo ago`;
-    return `${(days / 365).toFixed(1)} yr ago`;
+    const value = Number(days);
+    if (value <= 0) return "today";
+    if (value === 1) return "yesterday";
+    if (value < 30) return `${value} days ago`;
+    if (value < 365) return `${Math.round(value / 30)} mo ago`;
+    return `${(value / 365).toFixed(1)} yr ago`;
   }
 
   function fmtDate(value) {
@@ -100,9 +126,16 @@
 
   function fmtDay(value) {
     if (!value) return "—";
-    const date = new Date(value.length <= 10 ? `${value}T00:00:00Z` : value);
+    const date = new Date(String(value).length <= 10 ? `${value}T00:00:00Z` : value);
     if (Number.isNaN(date.getTime())) return value;
     return date.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "2-digit" });
+  }
+
+  function fmtShortDay(value) {
+    if (!value) return "—";
+    const date = new Date(String(value).length <= 10 ? `${value}T00:00:00Z` : value);
+    if (Number.isNaN(date.getTime())) return value;
+    return date.toLocaleDateString(undefined, { month: "short", day: "2-digit" });
   }
 
   function fmtBytes(bytes) {
@@ -127,46 +160,102 @@
       .replace(/'/g, "&#39;");
   }
 
+  /* --------------------------------------------------------------- people --- */
+  function initials(name) {
+    const parts = String(name || "?").trim().split(/[\s._-]+/).filter(Boolean);
+    if (!parts.length) return "?";
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
+
+  function hueFor(text) {
+    let hash = 0;
+    for (let index = 0; index < String(text).length; index += 1) {
+      hash = (hash * 31 + String(text).charCodeAt(index)) % 360;
+    }
+    return hash;
+  }
+
+  function avatar(name, extraClass) {
+    const hue = hueFor(name || "?");
+    const cls = extraClass ? ` ${extraClass}` : "";
+    return `<span class="avatar${cls}" style="background:hsl(${hue} 46% 38%);color:#fff" title="${escapeHtml(name || "")}" aria-hidden="true">${escapeHtml(initials(name))}</span>`;
+  }
+
+  /* --------------------------------------------------------------- tones --- */
+  const HEALTH_TONES = [
+    { min: 85, tone: "ok", variable: "--ok" },
+    { min: 70, tone: "ok", variable: "--ok" },
+    { min: 55, tone: "warn", variable: "--warn" },
+    { min: 40, tone: "warn", variable: "--danger" },
+    { min: 0, tone: "danger", variable: "--danger" },
+  ];
+
+  function healthTone(score) {
+    const value = Number(score) || 0;
+    const entry = HEALTH_TONES.find((candidate) => value >= candidate.min) || HEALTH_TONES[HEALTH_TONES.length - 1];
+    return entry.tone;
+  }
+
+  /** CSS colour for a score, usable in inline styles and SVG. */
+  function healthColor(score) {
+    const value = Number(score) || 0;
+    const entry = HEALTH_TONES.find((candidate) => value >= candidate.min) || HEALTH_TONES[HEALTH_TONES.length - 1];
+    return `var(${entry.variable})`;
+  }
+
   function stateBadge(repository) {
     const map = {
-      clean: ["badge-ok", "clean"],
-      dirty: ["badge-warn", "uncommitted"],
-      detached: ["badge-warn", "detached HEAD"],
-      bare: ["badge-neutral", "bare"],
-      empty: ["badge-neutral", "no commits"],
-      error: ["badge-bad", "error"],
-      unknown: ["badge-neutral", "not scanned"],
+      clean: ["ok", "clean"],
+      dirty: ["warn", "uncommitted"],
+      detached: ["warn", "detached HEAD"],
+      bare: ["neutral", "bare"],
+      empty: ["neutral", "no commits"],
+      error: ["danger", "error"],
+      unknown: ["neutral", "not scanned"],
     };
-    const [cls, label] = map[repository.state] || map.unknown;
-    return `<span class="badge ${cls}">${escapeHtml(label)}</span>`;
+    const [tone, label] = map[repository.state] || map.unknown;
+    return `<span class="badge badge--${tone}">${escapeHtml(label)}</span>`;
   }
 
   function stalenessBadge(staleness, label) {
-    const map = {
-      active: "badge-ok",
-      inactive: "badge-info",
-      stale: "badge-warn",
-      abandoned: "badge-bad",
-      empty: "badge-neutral",
-      unknown: "badge-neutral",
-    };
-    return `<span class="badge ${map[staleness] || "badge-neutral"}">${escapeHtml(label || staleness || "unknown")}</span>`;
-  }
-
-  function healthColor(score) {
-    if (score >= 85) return "#3fb950";
-    if (score >= 70) return "#7bd88f";
-    if (score >= 55) return "#d29922";
-    if (score >= 40) return "#e3873f";
-    return "#f85149";
+    const map = { active: "ok", inactive: "info", stale: "warn", abandoned: "danger", empty: "neutral", unknown: "neutral" };
+    return `<span class="badge badge--${map[staleness] || "neutral"}">${escapeHtml(label || staleness || "unknown")}</span>`;
   }
 
   function healthBadge(health) {
-    if (!health) return '<span class="badge badge-neutral">—</span>';
+    if (!health) return '<span class="badge badge--neutral">—</span>';
     const score = Math.round(health.score || 0);
-    return `<span class="badge" style="background:${healthColor(score)}22;color:${healthColor(score)};border-color:${healthColor(score)}55">${health.grade || ""} ${score}</span>`;
+    const tone = healthTone(score);
+    return `<span class="badge badge--${tone}">${escapeHtml(health.grade || "")} ${score}</span>`;
   }
 
+  /* --------------------------------------------------------------- markup --- */
+  function meter(value, options) {
+    const opts = options || {};
+    const max = Number(opts.max || 100) || 100;
+    const percentage = Math.max(0, Math.min(100, (Number(value) || 0) / max * 100));
+    const label = opts.label === undefined ? fmtNumber(value) : opts.label;
+    const color = opts.color || "var(--accent)";
+    return `<span class="meter${opts.size === "lg" ? " meter-lg" : ""}" role="img" aria-label="${escapeHtml(String(label))}">
+      <span class="meter-track"><span class="meter-fill" style="width:${percentage.toFixed(1)}%;background:${color}"></span></span>
+      ${opts.showValue === false ? "" : `<span class="meter-value">${escapeHtml(String(label))}</span>`}
+    </span>`;
+  }
+
+  function skeleton(lines) {
+    const count = lines || 3;
+    const widths = ["w-80", "w-60", "w-30"];
+    return `<div class="skeleton-group">${Array.from({ length: count })
+      .map((_, index) => `<div class="skeleton skeleton-line ${widths[index % widths.length]}"></div>`)
+      .join("")}</div>`;
+  }
+
+  function emptyIcon(name) {
+    return Icons.get(name || "info");
+  }
+
+  /* ---------------------------------------------------------------- utils --- */
   function queryString(params) {
     const search = new URLSearchParams();
     Object.entries(params || {}).forEach(([key, value]) => {
@@ -192,21 +281,58 @@
     link.remove();
   }
 
+  async function copy(text) {
+    try {
+      if (navigator.clipboard && window.isSecureContext !== false) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch (error) {
+      /* fall through to the legacy path */
+    }
+    try {
+      const area = document.createElement("textarea");
+      area.value = text;
+      area.setAttribute("readonly", "");
+      area.style.position = "fixed";
+      area.style.opacity = "0";
+      document.body.appendChild(area);
+      area.select();
+      const ok = document.execCommand("copy");
+      area.remove();
+      return ok;
+    } catch (error) {
+      return false;
+    }
+  }
+
   global.Api = api;
   global.Fmt = {
     number: fmtNumber,
+    compact: fmtCompact,
+    decimal: fmtDecimal,
+    percent: fmtPercent,
+    signed: fmtSigned,
     duration: fmtDuration,
     date: fmtDate,
     day: fmtDay,
+    shortDay: fmtShortDay,
     bytes: fmtBytes,
     shortSha,
     escapeHtml,
+    initials,
+    avatar,
+    meter,
+    skeleton,
+    emptyIcon,
+    healthTone,
+    healthColor,
     stateBadge,
     stalenessBadge,
     healthBadge,
-    healthColor,
     queryString,
     debounce,
     download,
+    copy,
   };
 })(window);
