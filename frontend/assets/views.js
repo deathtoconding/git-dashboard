@@ -91,8 +91,171 @@
       .join("");
   }
 
+  /** Evidence layer under the briefing: every finding, grouped by severity. */
+  function findingsPanel(insights) {
+    if (!insights || !insights.length) {
+      return `<div class="empty-state empty-state--inline">${Icons.get("check")}<p>No findings were generated from the collected data.</p></div>`;
+    }
+    const order = ["error", "warning", "info"];
+    return order
+      .map((severity) => {
+        const items = insights.filter((item) => item.severity === severity);
+        if (!items.length) return "";
+        const meta = SEVERITY[severity] || SEVERITY.info;
+        return `<div class="findings-group">
+          <div class="findings-head">
+            <span class="badge badge--${meta.tone}">${items.length} ${esc(meta.label)}</span>
+          </div>
+          <ul class="findings-list">
+            ${items
+              .map(
+                (item) => `<li class="finding">
+                  <span class="finding-repo">${
+                    item.repository_id
+                      ? `<a href="/repositories/${item.repository_id}" data-link>${esc(item.repository_name || "Repository")}</a>`
+                      : esc(item.repository_name || "Dashboard")
+                  }</span>
+                  <span class="finding-message">${esc(item.message)}</span>
+                  ${item.action ? `<span class="finding-action">${esc(item.action)}</span>` : ""}
+                </li>`
+              )
+              .join("")}
+          </ul>
+        </div>`;
+      })
+      .join("");
+  }
+
   function repoLink(repository) {
     return `<a class="cell-main" href="/repositories/${repository.id}" data-link>${esc(repository.name)}</a>`;
+  }
+
+  /* -------------------------------------------------------------- briefing --- */
+
+  /** "3 h ago" style label for a timestamp. */
+  function agoLabel(value) {
+    const then = value instanceof Date ? value.getTime() : new Date(value).getTime();
+    if (!Number.isFinite(then)) return "";
+    const minutes = Math.max(0, Math.round((Date.now() - then) / 60000));
+    if (minutes < 1) return "just now";
+    if (minutes < 60) return `${minutes} min ago`;
+    const hours = Math.round(minutes / 60);
+    if (hours < 24) return `${hours} h ago`;
+    const days = Math.round(hours / 24);
+    return days === 1 ? "yesterday" : `${days} days ago`;
+  }
+
+  const SNAPSHOT_KEY = "git-dashboard-snapshot-v1";
+
+  /** Compare the current figures with the previous visit and describe the move. */
+  function visitDelta(cards) {
+    const current = {
+      at: Date.now(),
+      commits: Number(cards.commits) || 0,
+      repositories: Number(cards.repositories) || 0,
+      uncommitted: Number(cards.uncommitted_changes) || 0,
+      stale: Number(cards.stale_repositories) || 0,
+      health: Number(cards.average_health) || 0,
+    };
+    let previous = null;
+    try {
+      previous = JSON.parse(localStorage.getItem(SNAPSHOT_KEY) || "null");
+    } catch (error) {
+      previous = null;
+    }
+    try {
+      localStorage.setItem(SNAPSHOT_KEY, JSON.stringify(current));
+    } catch (error) {
+      /* storage disabled: no delta is shown */
+    }
+    if (!previous || !previous.at) return "";
+
+    const parts = [];
+    const move = (delta, singular, plural) => {
+      if (!delta) return;
+      parts.push(`${delta > 0 ? "+" : "−"}${num(Math.abs(delta))} ${Math.abs(delta) === 1 ? singular : plural}`);
+    };
+    move(current.commits - previous.commits, "commit stored", "commits stored");
+    move(current.repositories - previous.repositories, "repository", "repositories");
+    move(current.uncommitted - previous.uncommitted, "uncommitted file", "uncommitted files");
+    move(current.stale - previous.stale, "stale repository", "stale repositories");
+    const healthMoved = Math.abs(current.health - Number(previous.health || 0)) >= 0.1;
+    const shown = parts.slice(0, 3).join(", ");
+    const health = healthMoved ? `average health ${Fmt.decimal(previous.health, 1)} → ${Fmt.decimal(current.health, 1)}` : "";
+    const body = [shown, health].filter(Boolean).join("; ");
+    return `Since your last visit ${agoLabel(previous.at)}: ${body || "nothing changed"}.`;
+  }
+
+  function lastScanLabel(scan) {
+    if (!scan || !scan.status) return "No scan recorded yet — the figures above come from the last stored data.";
+    const bits = [`${num(scan.scanned)} scanned`];
+    if (scan.failed) bits.push(`${num(scan.failed)} failed`);
+    bits.push(`${Fmt.signed(scan.commits_added)} commits`);
+    if (scan.duration_ms) bits.push(`${num(scan.duration_ms)} ms`);
+    const when = scan.finished_at ? ` ${agoLabel(scan.finished_at)}` : "";
+    return `Last scan (${esc(String(scan.kind || "scan"))}, ${esc(String(scan.status))})${when}: ${bits.join(" · ")}.`;
+  }
+
+  function briefingHtml(briefing, delta) {
+    const tone = ["danger", "warn", "ok", "neutral"].includes(briefing.tone) ? briefing.tone : "neutral";
+    const lines = (briefing.lines || [])
+      .map((line) => {
+        const severity = SEVERITY[line.severity] ? line.severity : "info";
+        const target =
+          line.repository_id !== null && line.repository_id !== undefined
+            ? `<a class="btn btn-sm" href="/repositories/${line.repository_id}" data-link>${esc(line.repository_name || "Open")}</a>`
+            : "";
+        return `<li class="briefing-line briefing-line--${severity}">
+          <span class="briefing-icon">${Icons.get(SEVERITY[severity].icon)}</span>
+          <span>
+            <span class="briefing-text">${esc(line.text)}</span>
+            ${line.action ? `<span class="briefing-action">${Icons.get("chevronRight")} ${esc(line.action)}</span>` : ""}
+          </span>
+          ${target}
+        </li>`;
+      })
+      .join("");
+    const nextAction = briefing.next_action
+      ? `<div class="next-action next-action--${SEVERITY[briefing.next_action.severity] ? briefing.next_action.severity : "info"}">
+          ${Icons.get("zap")}
+          <div class="grow">
+            <div class="next-action-label">Do this first</div>
+            <div class="next-action-body"><strong>${esc(briefing.next_action.text)}</strong>
+              ${briefing.next_action.reason ? `<span class="next-action-why">${esc(briefing.next_action.reason)}</span>` : ""}</div>
+          </div>
+          ${
+            briefing.next_action.repository_id
+              ? `<a class="btn btn-sm" href="/repositories/${briefing.next_action.repository_id}" data-link>${esc(
+                  briefing.next_action.repository_name || "Open repository"
+                )}</a>`
+              : ""
+          }
+        </div>`
+      : briefing.tone === "neutral"
+        ? `<div class="next-action next-action--info">
+            ${Icons.get("settings")}
+            <div class="grow">
+              <div class="next-action-label">Do this first</div>
+              <div class="next-action-body"><strong>Register a repository root, then scan.</strong>
+                <span class="next-action-why">The dashboard reads local Git metadata only — nothing leaves this machine.</span></div>
+            </div>
+            <a class="btn btn-sm" href="/settings" data-link>Open settings</a>
+          </div>`
+        : "";
+
+    return `<section class="panel briefing briefing--${tone}">
+      <div class="briefing-head">
+        <div class="briefing-kicker">${Icons.get("zap")}<span>Briefing</span></div>
+        <h2 class="briefing-headline">${esc(briefing.headline)}</h2>
+        <p class="briefing-summary">${esc(briefing.summary)}</p>
+      </div>
+      ${nextAction}
+      ${lines ? `<ul class="briefing-lines">${lines}</ul>` : ""}
+      <div class="briefing-foot">
+        <span class="briefing-scan">${lastScanLabel(briefing.last_scan)}</span>
+        ${delta ? `<span class="briefing-delta">${esc(delta)}</span>` : ""}
+      </div>
+    </section>`;
   }
 
   function branchCell(branch) {
@@ -196,11 +359,15 @@
     const days = ctx.state.activityDays || 30;
     const data = await Api.dashboard(days, "day");
     const cards = data.cards;
+    const briefing = data.briefing || { tone: "neutral", headline: "", summary: "", lines: [], next_action: null, last_scan: null };
     const summary = data.activity.summary;
     const seriesValues = (data.activity.series || []).map((point) => Number(point.commits) || 0);
     const findingCount = data.insights.length;
+    const delta = visitDelta(cards);
 
     root.innerHTML = `
+      ${briefingHtml(briefing, delta)}
+
       <section class="kpis">
         ${kpi({
           label: "Repositories",
@@ -272,12 +439,12 @@
         </div>
         <div class="panel">
           ${panelHead(
-            "Recommendations",
-            `${num(Math.min(data.insights.length, 8))} of ${num(findingCount)} finding${findingCount === 1 ? "" : "s"} shown`,
+            "All findings",
+            `${num(findingCount)} finding${findingCount === 1 ? "" : "s"} generated from the collected data`,
             "",
             "bulb"
           )}
-          <div id="insights">${insightsHtml(data.insights.slice(0, 8))}</div>
+          <div id="insights">${findingsPanel(data.insights)}</div>
         </div>
       </section>
 
@@ -299,6 +466,7 @@
   }
 
   /* ------------------------------------------------------------ repositories */
+
   async function repositories(root, ctx) {
     const filters = ctx.state.repoFilters;
     const perPage = 25;
@@ -503,9 +671,24 @@
         }
       </section>
 
+      ${
+        health.recommendations.length
+          ? `<div class="next-action next-action--${
+              SEVERITY[health.recommendations[0].severity] ? health.recommendations[0].severity : "info"
+            }">
+              ${Icons.get("zap")}
+              <div class="grow">
+                <div class="next-action-label">Do this first</div>
+                <div class="next-action-body"><strong>${esc(health.recommendations[0].action || health.recommendations[0].message)}</strong>
+                  <span class="next-action-why">${esc(health.recommendations[0].message)}</span></div>
+              </div>
+            </div>`
+          : ""
+      }
+
       <section class="grid-2">
         <div class="panel">
-          ${panelHead("Health score", "Transparent, weighted signals", "", "zap")}
+          ${panelHead("Health score", "Weighted sum of five signals — each one is shown with its raw value", "", "zap")}
           <div class="health-summary">
             <div class="ring">${Charts.healthRing(health.score, 112)}</div>
             <div class="grow">

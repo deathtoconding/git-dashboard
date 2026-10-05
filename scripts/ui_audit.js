@@ -5,9 +5,11 @@
  * this one asserts the design system is actually wired up - KPI/panel/chart
  * markup, health meters and rings, the heatmap, segmented filters, tab
  * state, modal focus handling, theme cycling, keyboard shortcuts, persisted
- * view state and that every interactive control has an accessible name. The
- * last step clicks "Scan all repositories" and waits for progress, the toast
- * and the reset button, so it does run a real (fast, incremental) scan.
+ * view state and that every interactive control has an accessible name. It also
+ * checks the narrative layer (briefing tone/headline/lines, 'Do this first',
+ * severity-grouped findings). The last
+ * step clicks "Scan all repositories" and waits for progress, the toast and the
+ * reset button, so it does run a real (fast, incremental) scan.
  *
  * Optional developer tool: the application itself has no Node dependency.
  *
@@ -68,10 +70,38 @@ function accessibleName(el) {
   // --- dashboard
   const kpis = doc.querySelectorAll("#view .kpi-card");
   check(kpis.length === 6, `dashboard: expected 6 KPI cards, found ${kpis.length}`);
+
+  // The briefing leads the dashboard and must be a real narrative, not decoration.
+  const briefing = doc.querySelector("#view .briefing");
+  check(Boolean(briefing), "dashboard: briefing panel missing");
+  if (briefing) {
+    check(/\bbriefing--(danger|warn|ok|neutral)\b/.test(briefing.className), `briefing: unexpected tone class ${briefing.className}`);
+    const headline = briefing.querySelector(".briefing-headline");
+    check(headline && headline.textContent.trim().length > 8, "briefing: headline missing or too short");
+    check(Boolean(briefing.querySelector(".briefing-summary")), "briefing: summary line missing");
+    const lines = briefing.querySelectorAll(".briefing-line");
+    check(lines.length <= 5, `briefing: expected at most 5 lines, found ${lines.length}`);
+    const severities = [...lines].map((line) => (line.className.match(/briefing-line--(\w+)/) || [])[1]);
+    const ranks = { error: 0, warning: 1, info: 2 };
+    check(
+      severities.every((value, index) => index === 0 || ranks[severities[index - 1]] <= ranks[value]),
+      `briefing: lines are not severity ordered (${severities.join(", ")})`
+    );
+    check(Boolean(briefing.querySelector(".briefing-foot")), "briefing: scan/delta footer missing");
+    const nextAction = briefing.querySelector(".next-action");
+    check(Boolean(nextAction) && nextAction.textContent.includes("Do this first"), "briefing: 'Do this first' callout missing");
+    notes.push(`briefing: ${headline.textContent.trim()} (${lines.length} lines)`);
+  }
+
+  const groups = doc.querySelectorAll("#view .findings-group");
+  const findings = doc.querySelectorAll("#view .finding");
+  check(groups.length >= 1, "dashboard: findings are not grouped by severity");
+  check(findings.length >= 1, "dashboard: no findings rendered");
+  notes.push(`findings: ${findings.length} in ${groups.length} severity groups`);
   check(doc.querySelectorAll("#view .chart--line svg polyline").length >= 1, "dashboard: no activity line rendered");
   check(doc.querySelectorAll("#view .sparkline").length >= 1, "dashboard: no sparkline rendered");
   check(doc.querySelectorAll("#view .panel").length >= 4, "dashboard: expected at least 4 panels");
-  check(doc.querySelectorAll("#view .insight").length >= 1, "dashboard: no insight rows rendered");
+  check(doc.querySelectorAll("#view .finding").length >= 1, "dashboard: no finding rows rendered");
   const dashUnnamed = unnamed(doc.querySelector("#view"));
   check(dashUnnamed.length === 0, `dashboard: controls without accessible name: ${JSON.stringify(dashUnnamed)}`);
   const nav = [...doc.querySelectorAll("#nav a")];
@@ -125,6 +155,10 @@ function accessibleName(el) {
   check(doc.querySelectorAll("#view .bar-list .bar-row").length >= 3, "detail: churn bars missing");
   check(doc.querySelectorAll("#view .ring svg .health-ring, #view svg.health-ring").length >= 1, "detail: health ring missing");
   check(doc.querySelectorAll("#view .signal").length >= 3, "detail: health signals missing");
+  check(
+    Boolean(doc.querySelector("#view .next-action")),
+    "detail: 'Do this first' callout missing even though the repository has recommendations"
+  );
   const detailUnnamed = unnamed(doc.querySelector("#view"));
   check(detailUnnamed.length === 0, `detail: controls without accessible name: ${JSON.stringify(detailUnnamed)}`);
 
@@ -213,7 +247,7 @@ function accessibleName(el) {
   check(doc.querySelector("#scan-status .state-dot").className === "state-dot state-dot--ok", "scan: indicator did not settle on ok");
   notes.push(`scan progress indicator seen: ${sawProgress || "completed before the first poll"}`);
 
-  const result = { errors, notes, expectedRepositories, audits: 7 };
+  const result = { errors, notes, expectedRepositories, audits: 8 };
   console.log(JSON.stringify(result, null, 2));
   window.close();
   process.exit(errors.length ? 1 : 0);

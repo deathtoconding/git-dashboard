@@ -882,3 +882,82 @@ table.heatmap .heat-cell { display: block; width: 18px; height: 15px; min-width:
 
 .skeleton-group { display: flex; flex-direction: column; gap: 4px; }
 .bar-meta { display: block; font-size: 10.5px; color: var(--muted); }
+
+/* ============================================================================
+   The briefing: the narrative layer that opens the dashboard. Everything else
+   on the page is evidence for these sentences.
+   ========================================================================= */
+.briefing { border-left: 3px solid var(--border-strong); }
+.briefing--danger { border-left-color: var(--danger); }
+.briefing--warn { border-left-color: var(--warn); }
+.briefing--ok { border-left-color: var(--ok); }
+.briefing--neutral { border-left-color: var(--border-strong); }
+
+.briefing-head { max-width: 78ch; }
+.briefing-kicker {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 10.5px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase;
+  color: var(--muted);
+}
+.briefing-kicker svg { width: 13px; height: 13px; }
+.briefing-headline {
+  margin: 6px 0 0; font-size: 22px; font-weight: 650; letter-spacing: -0.02em; line-height: 1.2;
+}
+.briefing--danger .briefing-headline { color: var(--danger); }
+.briefing--warn .briefing-headline { color: var(--warn); }
+.briefing-summary { margin: 5px 0 0; color: var(--muted); font-size: 13px; }
+
+.briefing-lines { list-style: none; margin: 16px 0 0; padding: 0; }
+.briefing-line {
+  display: grid; grid-template-columns: 18px minmax(0, 1fr) auto;
+  gap: 10px; align-items: start;
+  padding: 10px 0; border-top: 1px solid var(--border);
+}
+.briefing-line:first-child { border-top: 1px solid var(--border); }
+.briefing-icon { display: inline-flex; margin-top: 2px; }
+.briefing-icon svg { width: 15px; height: 15px; }
+.briefing-line--error .briefing-icon svg { color: var(--danger); }
+.briefing-line--warning .briefing-icon svg { color: var(--warn); }
+.briefing-line--info .briefing-icon svg { color: var(--info); }
+.briefing-line--ok .briefing-icon svg { color: var(--ok); }
+.briefing-text { font-size: 13px; color: var(--text); }
+.briefing-action { display: block; margin-top: 3px; font-size: 12px; color: var(--muted); }
+
+.briefing-foot {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 18px; flex-wrap: wrap;
+  margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border);
+  font-size: 11.5px; color: var(--muted);
+}
+.briefing-scan { font-variant-numeric: tabular-nums; }
+.briefing-delta strong { color: var(--text-soft); }
+
+/* "Do this first" callout (dashboard briefing and repository page). */
+.next-action {
+  display: flex; align-items: flex-start; gap: 12px;
+  margin-top: 16px; padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--warn) 38%, var(--border));
+  border-radius: var(--radius); background: var(--warn-soft);
+}
+.next-action--error { border-color: color-mix(in srgb, var(--danger) 38%, var(--border)); background: var(--danger-soft); }
+.next-action--info { border-color: color-mix(in srgb, var(--info) 38%, var(--border)); background: var(--info-soft); }
+.next-action svg { width: 16px; height: 16px; flex: none; margin-top: 2px; color: var(--warn); }
+.next-action--error svg { color: var(--danger); }
+.next-action--info svg { color: var(--info); }
+.next-action-label {
+  font-size: 10.5px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted);
+}
+.next-action-body { font-size: 13px; }
+.next-action-body strong { display: block; font-weight: 600; }
+.next-action-why { display: block; margin-top: 2px; font-size: 12px; color: var(--muted); }
+
+/* Findings: the evidence list under the briefing, grouped by severity. */
+.findings-group + .findings-group { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
+.findings-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.findings-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.finding { display: grid; gap: 1px; padding-left: 10px; border-left: 2px solid var(--border); }
+.finding-repo { font-size: 12px; font-weight: 600; }
+.finding-message { font-size: 12.5px; color: var(--text-soft); }
+.finding-action { font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); }
+.findings-group:has(.badge--danger) .finding { border-left-color: color-mix(in srgb, var(--danger) 45%, var(--border)); }
+.findings-group:has(.badge--warn) .finding { border-left-color: color-mix(in srgb, var(--warn) 45%, var(--border)); }
+.findings-group:has(.badge--info) .finding { border-left-color: color-mix(in srgb, var(--info) 45%, var(--border)); }
