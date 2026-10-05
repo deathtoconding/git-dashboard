@@ -1,0 +1,201 @@
+# Development guide
+
+How to work on the dashboard: local setup, the layout of the code, the test
+strategy, the conventions this project follows and how to extend it without
+breaking its architecture.
+
+## Setup
+
+```bash
+git clone https://github.com/deathtoconding/gitbhub-dashboard.git
+cd gitbhub-dashboard
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"     # runtime + pytest, httpx, ruff; installs `git-dashboard`
+```
+
+`pip install -r requirements.txt && pip install -r requirements-dev.txt` is the
+equivalent without installing the package itself. Without installation, run the
+CLI as `python -m app …` from the project root.
+
+Running the app during development:
+
+```bash
+python -m app --config config.json start --reload --log-level DEBUG
+python -m app --log-level DEBUG scan --all
+python -m app doctor            # git, config, database, roots
+```
+
+Logs go to `data/logs/dashboard.log` (rotating) as well as stderr; the format
+includes a `[repo=name]` field for repository-scoped work.
+
+## Repository layout
+
+```text
+app/
+├── api/             # FastAPI routers, dependencies, SPA fallback
+├── analyzers/       # metrics, activity, branch health, health score, insights
+├── collectors/      # Git CLI: runner, parsers, discovery, state, branches, commits, contributors
+├── database/        # schema + migrations, connection handling, Store (all SQL lives here)
+├── models/          # Pydantic request/response schemas
+├── services/        # scan service, background scan manager, repository service, exports
+├── config.py        # Settings, layered loading, validation
+├── logging_config.py
+├── main.py          # FastAPI factory and lifespan
+└── __main__.py      # CLI (subcommands, exit codes)
+frontend/            # buildless UI: index.html + assets/{styles,api,charts,views,app}.js
+scripts/             # create_demo_repos.py
+tests/               # pytest suite (see below)
+docs/                # architecture, configuration, verification, development
+```
+
+Dependency direction is one-way:
+
+```text
+api ─▶ services ─▶ collectors ─▶ (git CLI)
+ └──▶ analyzers ─▶ database.Store ─▶ SQLite
+```
+
+`collectors` never import from `api` or `services`; `database` never imports from
+`analyzers`. Keeping this direction is what keeps Git execution out of request
+handlers.
+
+## Test strategy
+
+```bash
+python -m pytest                  # fast suite (default; slow tests deselected)
+python -m pytest -m slow -s       # performance, prints [perf] lines
+python -m pytest -m requires_git  # only tests that need a real git binary
+python -m pytest tests/test_api.py::test_scan_endpoints -vv
+ruff check app tests scripts && ruff format --check app tests scripts
+```
+
+Principles:
+
+- **Real Git, real files.** Tests build repositories in `tmp_path` through
+  `tests/helpers.py` instead of mocking the Git CLI; a parsing or plumbing
+  regression fails the suite. `helpers.GIT_AVAILABLE` guards environments without
+  Git, and `requires_git` skips (rather than fails) those tests.
+- **Drive the whole stack.** Integration tests go filesystem → discovery → scan →
+  SQLite → analyzers → API, because that is the path the product actually takes.
+- **Failures are features.** `test_failures.py` covers missing Git, vanished,
+  corrupt and read-only repositories, timeouts and database errors: a broken
+  repository must degrade, never abort.
+- **Assert behaviour, not internals.** Prefer public functions and HTTP responses
+  over private helpers. When a value is documented (health weights, staleness
+  buckets, exit codes), assert the documented contract.
+- **Performance tests guard, not benchmark.** They assert generous upper bounds
+  and print a `[perf]` line for humans (see `docs/verification.md`).
+- **Never call out to the network.** No test may require GitHub or any remote.
+
+Fixtures live in `tests/conftest.py`: `settings` (temporary config and database),
+`database`, `store`, `runner`, `collector`, `repositories`, `scanner`,
+`repo_factory`, `client` (FastAPI `TestClient` over a temporary database).
+
+## Conventions
+
+- **Formatting and linting:** `ruff format` and `ruff check` (line length 120,
+  target Python 3.10). Both must be clean before a commit; no other style rules
+  are enforced.
+- **Type hints everywhere.** `from __future__ import annotations` is used in
+  every module; public functions have annotated parameters and returns.
+- **Logging, not printing,** in library code: `get_logger("module")` and
+  `get_repo_logger("module", repo)` for repository-scoped work. Never log a whole
+  repository row.
+- **No `subprocess` outside `app/collectors/`.** A test enforces this for the API
+  layer; the rule applies to the rest of the code as well.
+- **No invented data.** Every value shown must be computed from Git data or the
+  database. If something cannot be known, show a warning or `null`, never a
+  plausible number.
+- **Errors:** configuration problems raise `ConfigError`; repository problems
+  raise `RepositoryError`; database problems raise `DatabaseError`. CLI handlers
+  translate them into human messages and stable exit codes.
+- **Commits:** one logical change per commit, written in the imperative mood,
+  with a body when the *why* is not obvious. Mechanical changes (formatting,
+  renames) are separate commits.
+
+### CLI exit codes
+
+| Code | Meaning |
+| --- | --- |
+| 0 | Success |
+| 1 | Refused action (for example `init-config` without `--force`) |
+| 2 | Repository error (not registered, invalid path) |
+| 4 | Configuration error (bad file, unknown key, invalid value) |
+| 5 | Database error (unwritable path, failed migration) |
+
+## How to extend
+
+### Add a configuration key
+
+1. Add the field (with default) to `Settings` in `app/config.py`.
+2. Add it to `config.example.json` and document it in `docs/configuration.md`.
+3. If it changes behaviour, cover it in `tests/test_config.py`.
+4. Remember: unknown keys are fatal, so the field name is a public contract.
+
+### Add a collector
+
+1. Put the Git invocation in `app/collectors/` and parse it with a pure function
+   in `parsers.py` (testable without Git).
+2. Return plain dicts/dataclasses; do not write to the database from a collector.
+3. Wire it through `GitCollector`, then store it in `ScanService`.
+4. Test parsing with synthetic output in `tests/test_parsers.py` and the happy
+   path with a real repository in `tests/test_collectors.py`.
+
+### Add an analyzer
+
+1. Accept `(store, repository_id, …)` and return plain serialisable structures.
+2. Keep it deterministic and cheap enough for a dashboard request; add an index
+   in `app/database/schema.py` (with a migration) if a query gets slow.
+3. Expose it through a service or route and cover it in `tests/test_analyzers.py`.
+
+### Add an API route
+
+1. Add the handler to the relevant router in `app/api/routes/`, declare
+   request/response models in `app/models/schemas.py`.
+2. Read data from the store; never spawn a process.
+3. Add the endpoint to the tables in `README.md` and cover it in
+   `tests/test_api.py` (including a failure case).
+
+### Change the database schema
+
+1. Append a new migration to `MIGRATIONS` in `app/database/schema.py` and bump
+   `SCHEMA_VERSION`; never edit a released migration.
+2. Keep migrations idempotent and additive where possible.
+3. Update the data-model table in `docs/architecture.md` and cover the upgrade in
+   `tests/test_database.py`.
+
+### Touch the frontend
+
+- Plain HTML/CSS/JS only; no npm, no bundler, no build step. Assets are served
+  from `/static` and the server falls back to `index.html` for non-API paths.
+- Views are functions `(root, ctx, ...params)` returning rendered HTML, exposed on
+  `window.Views`; shared helpers live in `api.js` (`Api`, `Fmt`) and `charts.js`.
+- Frontend state is persisted in `localStorage` under `git-dashboard-state-v1`.
+- After changes, walk the UI by hand or with the optional harness (Node + jsdom,
+  nothing the app itself depends on):
+
+  ```bash
+  python -m app --config config.json start &
+  npm install --prefix /tmp/ui-smoke jsdom
+  NODE_PATH=/tmp/ui-smoke/node_modules node scripts/ui_smoke.js http://127.0.0.1:8000
+  ```
+
+  It covers every view, every repository tab and the commit dialog, and fails on
+  console errors or failed requests.
+
+## Definition of done
+
+Before a change is considered complete:
+
+1. `ruff check app tests scripts` and `ruff format --check app tests scripts` pass.
+2. `python -m pytest` passes; new behaviour has tests, including at least one
+   failure-mode test where relevant.
+3. `python -m pytest -m slow -s` still passes when scanners, storage or API
+   aggregation changed.
+4. Documentation is updated: `README.md` for user-visible behaviour,
+   `docs/configuration.md` for new keys, `docs/architecture.md` for structural
+   changes, and `docs/verification.md` when the verification record changes.
+5. The app was exercised manually at least once in the way the change affects it
+   (CLI command, API call, or UI view).
+6. The change is committed on its own, with a message explaining *why*.

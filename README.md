@@ -1,56 +1,135 @@
-# gitbhub-dashboard
+# Local Git Repository Dashboard
 
-A local-first dashboard for the Git repositories already on your machine.
+A self-contained, local dashboard for discovering, analyzing and monitoring the
+Git repositories on your machine.
 
-Point it at a directory, it finds the repositories inside it, scans them with the
-`git` command line and stores what it finds in a SQLite file next to the project.
-The web UI then shows activity, branches, contributors, file churn and a
-transparent health score per repository.
+The project does **not require the GitHub API, cloud services, paid APIs or a
+hosted database**. Repositories are analyzed locally through the Git CLI, the
+results are stored in SQLite and presented in a local web dashboard. It keeps
+working with the network switched off.
 
-Everything is computed from Git data. There is no GitHub API, no OAuth token, no
-telemetry, no cloud service and no build step — the dashboard keeps working with
-the network switched off.
+## Features
 
-## What it gives you
+- Discover local Git repositories under one or more configured roots
+- Register repositories manually or through directory scanning
+- Analyze branches, commits, contributors and file changes
+- Detect uncommitted changes and detached HEAD repositories
+- Identify merged, inactive and stale branches
+- Calculate repository activity and health metrics
+- Incrementally scan repositories (only new commits are collected)
+- Store normalized data in SQLite
+- Browse repositories in a local web UI, including commit history and details
+- Run scans through the CLI or the HTTP API
+- Export JSON snapshots, CSV dumps and SQLite backups
 
-- **Repository discovery** — walk a "projects root" (or several) and register
-  every Git repository found, including bare mirrors, without typing paths one by
-  one.
-- **Commits and file changes** — history per repository with per-file
-  additions/deletions, search by subject/SHA/author/date.
-- **Branches** — local and remote branches with age, upstream tracking, ahead and
-  behind counts, merged/unmerged status.
-- **Contributors** — commits, lines added/deleted and last activity per person,
-  with weekly trends.
-- **Activity** — commit series by day/week/month, heatmap by weekday and hour.
-- **Health and insights** — a weighted score with every signal and its
-  contribution exposed, plus concrete recommendations ("12 uncommitted files",
-  "no commits in 120 days", "3 stale branches").
-- **Exports** — JSON snapshots, CSV dumps of every table and SQLite backups.
+## Architecture
+
+```text
+                 Local Machine
+                      │
+                      ▼
+              Repository Discovery
+                      │
+                      ▼
+                Git Collectors
+                      │
+                      ▼
+                 Normalization
+                      │
+                      ▼
+                    SQLite
+                      │
+             ┌────────┴────────┐
+             ▼                 ▼
+        REST API          CLI / Services
+             │
+             ▼
+        Web Dashboard
+```
+
+### Architectural boundary
+
+Git execution is deliberately isolated in the collector layer. The API layer does
+not execute Git commands, so a slow repository or a hung `git` process can never
+block a web request.
+
+```text
+app/
+├── api/          # HTTP/API layer (routes, request models, dependency wiring)
+├── collectors/   # Git interaction: the only place a process is spawned
+├── analyzers/    # Metrics and health analysis over stored data
+├── services/     # Application services (scanning, discovery, exports)
+├── database/     # SQLite schema, connection handling and queries
+├── models/       # Request/response schemas for the API
+└── __main__.py   # Command-line interface (`python -m app`)
+```
+
+This boundary is enforced by automated tests
+(`tests/test_api.py::test_request_handlers_never_spawn_processes`).
 
 ## Requirements
 
-- Python 3.10 or newer
-- `git` on `PATH` (the dashboard shells out to it; no libgit2, no extra binaries)
+- Python 3.10 or newer (developed and verified on 3.11)
+- Git on `PATH`
+- A local Git repository, or a directory containing repositories
+- A modern web browser
 
-## Quick start
+No GitHub account, token or API access is required.
+
+## Installation
 
 ```bash
 git clone https://github.com/deathtoconding/gitbhub-dashboard.git
 cd gitbhub-dashboard
 
 python3 -m venv .venv
-source .venv/bin/activate        # Windows: .venv\Scripts\activate
+source .venv/bin/activate        # Windows PowerShell: .venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-
-python -m app init-config                 # writes config.json
-$EDITOR config.json                       # set "repository_roots"
-python -m app discover --register         # find and register repositories
-python -m app scan --all                  # collect commits, branches, contributors
-python -m app start                       # http://127.0.0.1:8000
 ```
 
-A minimal `config.json` for a normal setup:
+Optional — install the development tooling and the `git-dashboard` console
+script (the commands below use `python -m app`, which works without installing):
+
+```bash
+pip install -e ".[dev]"     # editable: the checkout stays the source of truth
+python -m pytest            # verify the checkout
+```
+
+Use an **editable** install or run from the checkout: the UI assets (`frontend/`)
+and local data (`data/`) live next to the source. A copied, non-editable
+`pip install .` serves the JSON API under `/api` only and answers `/` with a clear
+message instead of pretending the UI is there.
+
+## Quick start
+
+```bash
+python -m app init-config            # writes config.json (refuses to overwrite; --force resets)
+$EDITOR config.json                  # set "repository_roots"
+python -m app discover --register    # find repositories and register them
+python -m app scan --all             # collect commits, branches, contributors
+python -m app start                  # http://127.0.0.1:8000
+```
+
+### Everyday commands
+
+```bash
+python -m app scan --all                  # incremental: only new commits
+python -m app scan 3                      # one repository (by id)
+python -m app scan --all --full-history   # re-walk complete histories
+python -m app scan --all --discover       # also pick up repositories added on disk
+python -m app repositories                # list repositories
+python -m app status                      # summary, git version, latest scan runs
+python -m app insights                    # actionable recommendations
+python -m app export --format json        # data/exports/dashboard-*.json
+python -m app export --format csv         # data/exports/csv/*.csv
+python -m app export --format backup      # data/backups/dashboard-*.db
+```
+
+Add `--json` (before or after the subcommand) for machine-readable output.
+
+Then open <http://localhost:8000>.
+
+A minimal `config.json`:
 
 ```json
 {
@@ -59,142 +138,248 @@ A minimal `config.json` for a normal setup:
 }
 ```
 
-Every other key has a default; the full reference is in
-[docs/configuration.md](docs/configuration.md).
+Every other key has a default; see [docs/configuration.md](docs/configuration.md).
 
-## Everyday use
+## Dashboard
 
-Scans are explicit: the dashboard never watches the filesystem and never changes
-your repositories. When you want fresh numbers, press **Scan all repositories**
-in the UI or run a scan from the shell — no restart required.
+### Overview
 
-```bash
-python -m app scan --all                  # incremental: only new commits
-python -m app scan 3                      # one repository (by id)
-python -m app scan --all --full-history   # re-walk complete histories
-python -m app scan --all --discover       # pick up repositories added on disk
-python -m app status                      # repositories, health, latest scan runs
-python -m app insights                    # recommendations as text
-python -m app doctor                      # check git, config, database, roots
-python -m app export --format json        # data/exports/dashboard-*.json
-python -m app export --format csv         # data/exports/csv/*.csv
-python -m app export --format backup      # data/backups/dashboard-*.db
+Aggregate metrics for every registered repository:
+
+- Repository, commit, branch and contributor counts
+- Stale branches and stale repositories
+- Uncommitted files and dirty repositories
+- Detached HEAD repositories
+- Average repository health and failing repositories
+
+### Repositories
+
+A searchable, sortable repository list with state, staleness, branch, change
+count, health grade and last commit; scan or open any row.
+
+### Activity
+
+Commit activity across repositories over a selectable window (day/week/month).
+
+### Branches
+
+Branch hygiene across all repositories: current, remote, merged, inactive and
+stale branches with age and upstream information.
+
+### Repository detail
+
+Per repository: **Overview** (working tree, health signals, recent commits),
+**Commits** (search, filters, per-commit file changes), **Branches**,
+**Contributors** and **Insights**.
+
+### Settings
+
+Repository roots, scan thresholds, exports (JSON/CSV/backup) and the effective
+configuration.
+
+## Data model
+
+The application stores normalized local Git information in SQLite:
+
+```text
+Repositories
+Branches
+Commits
+Contributors
+File changes
+Scan runs
 ```
 
-Add `--json` (before or after the subcommand) for machine-readable output.
+Git remains the source of truth; SQLite provides the searchable, queryable
+representation that the UI and API read. The full schema, column semantics and
+relationships are documented in [docs/architecture.md](docs/architecture.md).
 
-## What it does not do
+## Incremental scanning
 
-- No GitHub/GitLab API access and no authentication of any kind: it is a
-  single-user, local tool. Keep it on `127.0.0.1` (the default) unless the
-  machine itself is trusted.
-- No live file watching: figures change when you rescan.
-- No write operations on your repositories: `git log`, `git status`,
-  `git branch`, `git rev-list`, `git shortlog` and friends are read-only.
-- No hosted or multi-user mode, no accounts, no sharing.
+The scanner avoids unnecessary work. After an initial scan the newest commit SHA
+per repository is persisted, and the next scan asks Git only for commits that are
+not reachable from it (`git log --all --not <sha>`).
+
+```text
+Initial scan            Next scan
+    ↓                       ↓
+545 commits collected   nothing new
+    ↓                       ↓
+state persisted         0 additional commits collected
+```
+
+Repeated scans are idempotent, and a full re-walk is always available with
+`python -m app scan --all --full-history`.
+
+## Repository health
+
+Health is computed from observable repository properties, deterministically and
+locally — no external service and no AI model. Five weighted signals add up to
+the score (weights sum to 1.0):
+
+| Signal | Weight | Inputs |
+| --- | --- | --- |
+| `activity` | 0.30 | days since the last commit |
+| `branch_hygiene` | 0.25 | stale branch ratio, merged branches still present |
+| `working_tree` | 0.20 | uncommitted/untracked files, detached HEAD |
+| `recent_commits` | 0.15 | commits in the last 30 days |
+| `maintenance` | 0.10 | remote configured, scan health, hygiene checks |
+
+`GET /api/repositories/{id}/health` returns every signal with its weight, raw
+score and contribution, so the displayed number can be recomputed by hand.
+Grades: `A ≥ 85`, `B ≥ 70`, `C ≥ 55`, `D ≥ 40`, `E ≥ 25`, `F` below that.
 
 ## HTTP API
 
-All endpoints live under `/api`; the interactive OpenAPI page is at
-`http://127.0.0.1:8000/docs`.
+Every view is backed by JSON endpoints under `/api`; the interactive schema is at
+<http://localhost:8000/docs> and the OpenAPI document at `/openapi.json`. Scans
+run in the background: `POST /api/scan/all` with `{"background": true}` returns
+`202` and a job, and `GET /api/scan/status` reports
+`progress: {done, total}` until `running` is `false`. The endpoint groups are
+listed in [docs/architecture.md](docs/architecture.md#http-api-surface).
 
-| Group | Endpoints |
+## Verification
+
+Automated and manual verification was run against commit `7fcf8da` on
+2026-10-05 (the documentation commit that follows changes no code):
+
+```text
+python -m pytest                 193 passed, 4 deselected
+python -m pytest -m slow         4 passed (1/10/50/100 repositories)
+python -m pytest -m requires_git 63 passed, 134 deselected
+ruff check app tests scripts     clean
+ruff format --check app tests scripts  clean
+```
+
+The manual record covers a live API workflow (8 repositories, 545 commits,
+incremental rescan), a fresh-install workflow in an empty directory, a headless
+UI walk through every view and dialog, and the architecture-boundary check. The
+complete record — commands, observed output, discovered bugs, known limitations
+and the exact commit history — is in [docs/verification.md](docs/verification.md).
+
+## Verified demo dataset
+
+`scripts/create_demo_repos.py` generates the dataset below; all figures in the
+table come from scanning it.
+
+```text
+Repositories:       8
+Commits:            545
+Branches:           22
+Stale branches:      8
+Contributors:        5
+Uncommitted files:   5
+Dirty repositories:  2
+Stale repositories:  2
+Detached repos:      1
+Bare mirrors:        1
+Empty repositories:  1
+Average health:    72.0
+```
+
+Try it without touching your own repositories:
+
+```bash
+python scripts/create_demo_repos.py --target data/demo --repos 8 --seed 1337
+python -m app --config config.json discover --register
+python -m app --config config.json scan --all
+```
+
+`--seed` keeps the generated histories reproducible; `--repos` caps the dataset
+at the eight repository archetypes (clean, dirty, detached, bare mirror, empty,
+abandoned, busy, small).
+
+## Merge commits
+
+Git does not produce a normal per-file diff for merge commits through:
+
+```bash
+git log --numstat
+```
+
+A merge commit may therefore legitimately have `file_count = 0`. The API states
+this explicitly instead of leaving it as a missing value:
+
+```json
+{
+  "file_count": 0,
+  "note": "Merge commit: git reports no per-file diff for merges, so no file statistics are stored for it."
+}
+```
+
+The commit row keeps `is_merge = 1` and its real author, date and message, so
+merges are still counted in history, activity and contributor statistics.
+
+## Development principles
+
+- **Local-first** — the dashboard stays useful without any cloud service.
+- **Git as source of truth** — metadata comes from the local Git CLI; nothing is
+  invented and nothing is inferred from a hosted API.
+- **Layered architecture** — Git execution, persistence, analysis, services and
+  HTTP presentation are separate, with a test enforcing the boundary.
+- **Fail gracefully** — one broken repository never aborts a scan; warnings are
+  surfaced instead of being swallowed.
+- **Test behaviour, not implementation details** — tests build real repositories
+  and drive the whole pipeline rather than mocking Git.
+- **Incremental processing** — repeated scans avoid unnecessary work.
+- **Explicit over implicit** — unknown configuration keys, missing roots and
+  unimplemented behaviour are reported, never guessed at.
+
+## Project status
+
+Complete for its defined MVP scope:
+
+- Application code, CLI and REST API
+- SQLite persistence with migrations
+- Repository discovery, Git collectors and normalization
+- Repository analytics and health analysis
+- Web dashboard (buildless, no npm)
+- Unit, integration, failure, CLI and performance tests
+- Documentation: architecture, configuration, verification and development
+
+## Out of scope
+
+The current version intentionally does not include:
+
+- GitHub API integration
+- Cloud database or hosted deployment
+- Paid APIs
+- AI/LLM dependency
+- GitHub Actions CI workflow
+- An explicit project license
+
+None of these change the core local-first architecture; each can be added
+independently.
+
+## License
+
+No license has currently been declared.
+
+If this repository is intended for public redistribution, add an explicit
+open-source license before presenting it as an open-source project.
+
+## Roadmap
+
+Implemented already (listed here because they were originally planned as future
+work): CSV/JSON export, repository comparison, file-churn analysis, commit
+heatmaps and contributor trends.
+
+Potential future work:
+
+1. CI workflow (lint + tests on push)
+2. License
+3. More advanced health analytics
+4. Optional local LLM integration for narrative summaries
+5. Desktop packaging
+6. Optional GitHub API integration (additive, never required)
+
+The core application does not depend on any of these.
+
+## Further documentation
+
+| Document | Contents |
 | --- | --- |
-| System | `GET /api/health`, `GET /api/version`, `GET /api/dashboard`, `GET /api/insights`, `GET /api/activity`, `GET /api/activity/repositories`, `GET /api/branches` |
-| Repositories | `GET/POST /api/repositories`, `POST /api/repositories/bulk`, `GET/DELETE /api/repositories/{id}`, `GET /api/repositories/{id}/status`, `GET /api/repositories/suggestions`, `POST /api/repositories/discover`, `GET /api/repositories/compare?ids=1,2` |
-| Commits | `GET /api/repositories/{id}/commits`, `GET /api/repositories/{id}/commits/{sha}` |
-| Branches | `GET /api/repositories/{id}/branches` |
-| Analytics | `GET /api/repositories/{id}/(metrics\|activity\|contributors\|contributor-trends\|heatmap\|file-churn\|health)` |
-| Scanning | `POST /api/repositories/{id}/scan`, `POST /api/scan/all`, `POST /api/scan/full`, `POST /api/scan/repositories`, `GET /api/scan/status`, `GET /api/scan/jobs`, `GET /api/scan/history` |
-| Settings & export | `GET/PUT /api/settings`, `GET /api/settings/roots`, `GET /api/export/json`, `GET /api/export/csv/{table}`, `POST /api/export/snapshot`, `POST /api/export/backup` |
-
-Scans can run in the background: `POST /api/scan/all` with
-`{"background": true}` returns `202` and a job id; poll `GET /api/scan/status`
-for `progress: {done, total}` until `running` is `false`.
-
-## Configuration
-
-Precedence, highest first:
-
-1. CLI flags (`--host`, `--port`, `--database`, `--log-level`)
-2. Environment variables prefixed `GITDASH_` (`GITDASH_PORT=9000`)
-3. `config.json` (path from `--config` or `GITDASH_CONFIG`)
-4. Built-in defaults
-
-Unknown keys are rejected with a clear error instead of being silently ignored.
-See [docs/configuration.md](docs/configuration.md) for every key, its default and
-what it changes.
-
-## Data on disk
-
-| Path | Contents |
-| --- | --- |
-| `data/dashboard.db` | SQLite database: repositories, branches, commits, file changes, contributors, scan runs |
-| `data/backups/` | `export --format backup` copies |
-| `data/exports/` | JSON snapshots and CSV dumps |
-| `data/logs/dashboard.log` | Rotating log file (`python -m app start`) |
-| `data/demo/` | Repositories created by `scripts/create_demo_repos.py` for trying the dashboard out |
-
-The database and everything under `data/` are generated and git-ignored:
-deleting the file simply means the next scan re-collects everything.
-
-`scripts/create_demo_repos.py` builds a small but messy demo dataset (clean,
-dirty, detached, bare, empty and abandoned repositories, plus a contributor
-history) so you can explore the UI without pointing it at your own work:
-
-```bash
-python scripts/create_demo_repos.py --target data/demo  # 8 repositories, ~545 commits
-python -m app discover --register && python -m app scan --all
-```
-
-## Testing
-
-```bash
-pip install -r requirements-dev.txt
-python -m pytest                  # fast suite (~8s)
-python -m pytest -m slow          # performance tests on 1/10/50/100 repositories
-python -m pytest -m requires_git  # only tests that need a real git binary
-```
-
-The tests build real repositories in temporary directories and drive the whole
-pipeline (filesystem → discovery → scan → SQLite → analysis → API) instead of
-mocking Git, so they fail when Git plumbing or parsing actually breaks. The
-performance tests print a `[perf]` line with timings, database size and API
-latencies.
-
-Linting:
-
-```bash
-pip install ruff
-ruff check app tests scripts
-```
-
-## Troubleshooting
-
-- **"Git executable 'git' is not available"** — install Git or point
-  `git_binary` at the executable; `/api/health` reports the same problem.
-- **Repositories are not found** — check `repository_roots` in
-  `/api/settings/roots` (missing roots are listed there), raise `max_scan_depth`
-  and remember that `excluded_dirs` is skipped during the walk.
-- **A repository is trimmed to `history_depth` commits** — raise
-  `history_depth`; the scan reports a `History was capped at …` warning instead
-  of silently truncating.
-- **Scan times out** — raise `git_timeout_seconds` (the timeout is per Git
-  invocation).
-- **`file_count: 0` on a commit** — merge commits have no per-file diff in
-  `git log --numstat`, so they are stored without file statistics; the API adds
-  an explanatory `note`.
-- **Unreadable directories** — directories the process cannot read are skipped
-  and counted in the discovery result instead of aborting the walk.
-
-## How it works
-
-```
-filesystem ──▶ discovery ──▶ git CLI (collectors) ──▶ SQLite (store)
-                                                         │
-                        browser ◀── FastAPI ◀── analyzers (metrics, health, insights)
-```
-
-Git is only ever invoked from the collector layer, never from a request handler:
-API calls read the SQLite database. The full design, module map and data model
-are in [docs/architecture.md](docs/architecture.md).
+| [docs/architecture.md](docs/architecture.md) | Pipeline, module map, data model, health model, design decisions |
+| [docs/configuration.md](docs/configuration.md) | Every configuration key, its default and its effect |
+| [docs/verification.md](docs/verification.md) | Reproducible verification record and known limitations |
+| [docs/development.md](docs/development.md) | Local setup, test strategy, conventions, how to extend |

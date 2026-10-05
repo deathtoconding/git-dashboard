@@ -47,8 +47,27 @@ disk, and a hung `git` cannot exhaust the web server.
 | `app/services/scan_manager.py` | Background scans, job progress, busy guard |
 | `app/services/repository_service.py` | Registration, discovery endpoints, suggestions, removal |
 | `app/services/export_service.py` | JSON snapshots, CSV dumps, SQLite backups, comparisons |
+| `app/models/schemas.py` | Pydantic request/response models used by the routers |
 | `app/api/*` | FastAPI routers, dependency wiring, SPA fallback |
+| `app/__main__.py` | CLI subcommands, output formatting, exit codes (also installed as `git-dashboard`) |
 | `frontend/` | Buildless UI: `index.html` plus `assets/{styles.css,api.js,charts.js,views.js,app.js}` |
+
+## HTTP API surface
+
+| Group | Endpoints |
+| --- | --- |
+| System | `GET /api/health`, `/api/version`, `/api/dashboard`, `/api/insights`, `/api/activity`, `/api/activity/repositories`, `/api/branches` |
+| Repositories | `GET`/`POST /api/repositories`, `POST /api/repositories/bulk`, `GET`/`DELETE /api/repositories/{id}`, `GET /api/repositories/{id}/status`, `GET /api/repositories/suggestions`, `POST /api/repositories/discover`, `GET /api/repositories/compare?ids=1,2` |
+| Commits | `GET /api/repositories/{id}/commits`, `GET /api/repositories/{id}/commits/{sha}` |
+| Branches | `GET /api/repositories/{id}/branches` |
+| Analytics | `GET /api/repositories/{id}/(metrics\|activity\|contributors\|contributor-trends\|heatmap\|file-churn\|health\|recent-activity)` |
+| Scanning | `POST /api/repositories/{id}/scan`, `POST /api/scan/all`, `/api/scan/full`, `/api/scan/repositories`, `GET /api/scan/status`, `/api/scan/jobs`, `/api/scan/history` |
+| Settings & export | `GET`/`PUT /api/settings`, `GET /api/settings/roots`, `GET /api/export/json`, `GET /api/export/csv/{table}`, `POST /api/export/snapshot`, `POST /api/export/backup` |
+
+Per-repository insights are intentionally *not* an endpoint: `/api/insights`
+returns recommendations for every repository, and the repository page filters
+them client-side. Unknown non-API paths return `index.html` (SPA fallback),
+unknown `/api/…` paths return JSON `404`.
 
 ## Data model
 
@@ -57,7 +76,7 @@ disk, and a hung `git` cannot exhaust the web server.
 | `repositories` | `path_key` (unique), `state`, `staleness`, `health_score`, cached counts | One row per registered repository; `path_key` is case-folded so the same path cannot be registered twice |
 | `branches` | `repository_id`, `name`, `is_remote`, `is_current`, `is_stale`, `is_merged`, `ahead`, `behind`, `age_days` | Replaced on every scan |
 | `commits` | `repository_id`, `sha`, `authored_at`, `is_merge`, `additions`, `deletions` | Unique per `(repository_id, sha)` |
-| `file_changes` | `repository_id`, `commit_sha`, `path`, `change_type`, additions/deletions | Capped per commit by `file_changes_per_commit_limit` |
+| `file_changes` | `repository_id`, `commit_sha`, `path`, `change_type`, additions/deletions | `change_type` is `added`, `deleted` or `modified`; capped per commit by `file_changes_per_commit_limit` |
 | `contributors` | `repository_id`, `name`, `email`, counts | Derived from stored commits |
 | `scan_runs` | `repository_id` (NULL for an aggregate run), `status`, counters, `duration_ms` | Append-only audit trail of every scan |
 | `app_state` | key/value | Reserved for small persisted flags |
@@ -65,6 +84,15 @@ disk, and a hung `git` cannot exhaust the web server.
 Every child table cascades from `repositories`, so unregistering a repository
 deletes its data. The database uses WAL mode and a busy timeout, which keeps
 reads working while a scan writes.
+
+### Where Git is executed
+
+`app/collectors/git_runner.py` owns the only `subprocess` call in the project;
+everything else asks it for output. The runner pins a deterministic environment
+(`GIT_TERMINAL_PROMPT=0`, `GIT_PAGER=cat`, `GIT_OPTIONAL_LOCKS=0`, `LC_ALL=C.UTF-8`),
+applies a per-invocation timeout and reduces failures to one readable line.
+The server probes Git once during startup and caches the result, so no request
+handler ever waits on a process.
 
 ### Incremental scans
 
@@ -110,9 +138,10 @@ recomputed by hand. Grades are `A ≥ 85`, `B ≥ 70`, `C ≥ 55`, `D ≥ 40`, `
 - **Discovery never raises on permissions.** Unreadable directories are skipped
   and counted, because a projects root often contains directories the user
   cannot read.
-- **No build step and no npm.** The frontend is three plain scripts and a
-  stylesheet served from `/static`; the server falls back to `index.html` for
-  unknown non-API paths so client-side routes work on a hard refresh.
+- **No build step and no npm.** The frontend is `index.html` plus five static
+  assets (`styles.css`, `api.js`, `charts.js`, `views.js`, `app.js`) served from
+  `/static`; the server falls back to `index.html` for unknown non-API paths so
+  client-side routes work on a hard refresh.
 - **Frontend state lives in one place.** Filters and view preferences are
   persisted in `localStorage` under `git-dashboard-state-v1`; nothing is
   inferred from the server.
