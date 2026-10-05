@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from ...analyzers.health import repository_health, repository_staleness, working_tree_warnings
-from ...analyzers.metrics import parse_timestamp, repository_comparison
+from ...analyzers.metrics import repository_comparison
 from ...models.schemas import (
     DiscoveryRequest,
     RepositoryBulkCreate,
@@ -19,32 +18,9 @@ from ...models.schemas import (
 from ...services.repository_service import RepositoryError
 from ...services.scan_manager import ScanBusyError
 from ..deps import Services, get_repository, get_services
+from ..serializers import enrich_repository as _enrich
 
 router = APIRouter(tags=["repositories"])
-
-
-def _enrich(repository: dict[str, Any], services: Services) -> dict[str, Any]:
-    """Attach derived, UI-ready fields to a repository row."""
-    reference = datetime.now(timezone.utc)
-    last_dt = parse_timestamp(repository.get("last_commit_at"))
-    days_since = (reference - last_dt).days if last_dt else None
-    staleness = repository_staleness(
-        repository, days_since_last_commit=days_since, settings=services.settings, now=reference
-    )
-    scan_dt = parse_timestamp(repository.get("last_scanned_at"))
-    return {
-        **repository,
-        "days_since_last_commit": days_since,
-        "days_since_scan": (reference - scan_dt).days if scan_dt else None,
-        "staleness": staleness["bucket"],
-        "staleness_label": staleness["label"],
-        "staleness_message": staleness["message"],
-        "health": {
-            "score": round(float(repository.get("health_score") or 0), 1),
-            "grade": repository.get("health_grade") or "F",
-        },
-        "is_scanned": bool(repository.get("last_scanned_at")),
-    }
 
 
 @router.get("/repositories", response_model=RepositoryListResponse, summary="List registered repositories")

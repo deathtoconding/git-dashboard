@@ -14,6 +14,7 @@ from ...config import ConfigError, save_settings
 from ...logging_config import get_logger
 from ...models.schemas import SettingsUpdate
 from ..deps import Services, get_services
+from ..serializers import enrich_repository
 
 log = get_logger("api.system")
 
@@ -137,8 +138,14 @@ def dashboard(
 ) -> dict[str, Any]:
     """E7-S2 overview cards, recent activity chart and insights in one call."""
     summary = services.store.repository_summary()
-    repositories = services.store.list_repositories(sort="last_commit", order="desc")
-    recent = services.store.recently_active_repositories(limit=6)
+    reference = datetime.now(timezone.utc)
+    repositories = [
+        enrich_repository(row, services, now=reference)
+        for row in services.store.list_repositories(sort="last_commit", order="desc")
+    ]
+    recent = [
+        enrich_repository(row, services, now=reference) for row in services.store.recently_active_repositories(limit=6)
+    ]
 
     series = _global_series(services.store, days=days, bucket=bucket)
     total_commits_30d = services.store.count_commits_all(since=_days_ago(30))

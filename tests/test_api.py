@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import re
 import time
 from pathlib import Path
 
@@ -62,6 +63,26 @@ def test_frontend_is_served(client) -> None:
     assert client.get("/static/styles.css").status_code == 200
     assert client.get("/static/app.js").status_code == 200
     assert client.get("/repositories/42").status_code == 200  # SPA fallback
+
+
+def test_every_asset_referenced_by_index_html_is_served(client) -> None:
+    """A renamed or dropped asset must fail the suite instead of 404-ing in the browser."""
+    index = client.get("/").text
+    assets = re.findall(r'(?:src|href)="/static/([^"]+)"', index)
+    assert assets, "index.html no longer references any static asset"
+    for asset in assets:
+        response = client.get(f"/static/{asset}")
+        assert response.status_code == 200, f"/static/{asset} is referenced but not served"
+        assert response.content, f"/static/{asset} is empty"
+    # The UI kit must load after the API client and before the view layer.
+    order = re.findall(r'src="/static/([^"]+)"', index)
+    assert (
+        order.index("api.js")
+        < order.index("ui.js")
+        < order.index("charts.js")
+        < order.index("views.js")
+        < order.index("app.js")
+    )
 
 
 # ----------------------------------------------------------- E6-S2 repositories
@@ -265,6 +286,15 @@ def test_dashboard_and_insights_endpoints(client, repo_factory) -> None:
     assert len(dashboard["activity"]["series"]) == 30
     assert dashboard["repositories"] and dashboard["recent_repositories"]
     assert dashboard["insights"]
+
+    # The overview tables render the same repository fields as /api/repositories,
+    # so the dashboard payload must carry the derived UI fields too.
+    listed = {row["id"]: row for row in client.get("/api/repositories").json()["items"]}
+    for row in dashboard["repositories"] + dashboard["recent_repositories"]:
+        enriched = listed[row["id"]]
+        assert row["health"] == enriched["health"]
+        assert row["days_since_last_commit"] == enriched["days_since_last_commit"]
+        assert row["staleness"] == enriched["staleness"]
 
     insights = client.get("/api/insights").json()
     assert insights["counts"]["error"] >= 1  # the stale repository
