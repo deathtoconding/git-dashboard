@@ -22,6 +22,22 @@ Git is executed only in the collector layer. Request handlers read SQLite; they
 never spawn a process, so an API call cannot block on a repository on a slow
 disk, and a hung `git` cannot exhaust the web server.
 
+## The narrative layer
+
+The dashboard is read as **briefing → evidence → triage**:
+
+| Layer | Where | Rule |
+| --- | --- | --- |
+| Briefing | `GET /api/dashboard` → `briefing` (rendered first on the overview) | The only layer that judges. Tone, headline, summary, ≤ 5 findings ordered by severity, one next action, last scan. |
+| Evidence | KPI cards, activity chart, findings grouped by severity, repository tables | Presents stored values; never re-words a judgment. |
+| Triage | Repositories view presets, row actions, "Do this first" links | Turns a finding into one click: a filtered list or the repository concerned. |
+
+`build_briefing()` is a pure function: it receives the card totals, insights,
+enriched repository rows, scan status and activity summary, and returns
+sentences. It performs no queries and no estimation, and any sentence whose input
+is missing is dropped rather than padded — which is what makes the prose
+unit-testable (`tests/test_briefing.py`) and unable to drift from the data.
+
 ## Module map
 
 | Path | Responsibility |
@@ -39,10 +55,10 @@ disk, and a hung `git` cannot exhaust the web server.
 | `app/collectors/branches.py` | Branch inventory with upstream, ahead/behind, merged detection |
 | `app/collectors/contributors.py` | Contributor aggregation, `git shortlog` cross-check |
 | `app/collectors/collector.py` | `GitCollector` facade used by the scan service |
-| `app/analyzers/metrics.py` | Basic/activity/change metrics, comparison |
-| `app/analyzers/activity.py` | Day/week/month buckets, heatmap grid, contributor trends |
+| `app/analyzers/metrics.py` | Basic/activity/change metrics, day/week/month buckets, heatmap grid, contributor trends, comparison |
 | `app/analyzers/branch_health.py` | Branch classification and hygiene summary |
 | `app/analyzers/health.py` | Weighted health score, staleness buckets, recommendations |
+| `app/analyzers/briefing.py` | The narrative layer: headline, severity-ordered findings, next action, last-scan summary — pure, tested prose over values the dashboard already computed |
 | `app/services/scan_service.py` | One repository or many: collect → store → refresh health → record the run |
 | `app/services/scan_manager.py` | Background scans, job progress, busy guard |
 | `app/services/repository_service.py` | Registration, discovery endpoints, suggestions, removal |

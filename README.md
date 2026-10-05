@@ -1,12 +1,29 @@
 # Local Git Repository Dashboard
 
-A self-contained, local dashboard for discovering, analyzing and monitoring the
-Git repositories on your machine.
+Every repository on your machine is slowly telling you something: this one has
+not been touched in a year, that one has five files you never committed, the
+branch you merged last month is still sitting there. Nothing listens, so the
+signals rot quietly until something breaks or gets lost.
 
-The project does **not require the GitHub API, cloud services, paid APIs or a
-hosted database**. Repositories are analyzed locally through the Git CLI, the
-results are stored in SQLite and presented in a local web dashboard. It keeps
-working with the network switched off.
+This dashboard listens. It walks the roots you configure, reads each repository's
+own Git metadata through the `git` CLI, stores it in SQLite, and tells you what
+the workspace actually looks like — with the awkward parts first.
+
+The design stance is deliberately uncomfortable:
+
+- **It judges, and it shows its evidence.** The overview opens with a briefing
+  that names what needs a decision and what to do first; the tables underneath
+  are the proof, not the point.
+- **Nothing is invented.** Every figure, sentence and health score is computed
+  from Git data collected on this machine. Where a value is unknown, the number
+  is missing rather than guessed, and a sentence whose input is absent is simply
+  not written.
+- **No comfort by default.** Stale repositories, uncommitted work, detached HEADs
+  and decaying branches are stated plainly, in order of severity, with the action
+  each one implies.
+- **No cloud, no account, no build step.** No GitHub API, no hosted database, no
+  bundler, no npm runtime dependency. It keeps working with the network switched
+  off, and your code never leaves the machine.
 
 ## Features
 
@@ -158,6 +175,15 @@ Git data; nothing is estimated or placeholder-filled. The theme follows the
 operating system by default and the theme switch cycles
 light → dark → follow system.
 
+The dashboard reads in this order: **briefing → evidence → triage**. The briefing
+is the only part that judges (headline, up to five severity-ordered findings, a
+"Do this first" action, the last scan and what changed since your previous
+visit). Everything below it is evidence: KPI totals, the activity chart, the
+full findings list grouped by severity, and repository tables. When you want to
+act, the repositories view has preset chips — Everything, Needs work,
+Uncommitted, Neglected, Clean — so triage does not mean assembling filters by
+hand.
+
 Keyboard shortcuts: `Cmd`/`Ctrl`+`K` or `/` opens the command palette (views,
 repositories and actions), `R` reloads the current view, `g` then
 `d`/`r`/`a`/`b`/`s` jumps to Dashboard/Repositories/Activity/Branches/Settings,
@@ -165,7 +191,9 @@ and `Esc` closes dialogs.
 
 ### Overview
 
-Aggregate metrics for every registered repository:
+The briefing first — tone, headline, summary, up to five severity-ordered
+findings, the next action, the last scan and what changed since your last visit —
+then the aggregate metrics for every registered repository:
 
 - Repository, commit, branch and contributor counts
 - Stale branches and stale repositories
@@ -175,8 +203,9 @@ Aggregate metrics for every registered repository:
 
 ### Repositories
 
-A searchable, sortable repository list with state, staleness, branch, change
-count, health grade and last commit; scan or open any row.
+Triage presets (Everything, Needs work, Uncommitted, Neglected, Clean) over a
+searchable, sortable repository list with state, staleness, branch, change count,
+health meters and last commit; scan or open any row.
 
 ### Activity
 
@@ -261,23 +290,24 @@ listed in [docs/architecture.md](docs/architecture.md#http-api-surface).
 
 ## Verification
 
-Automated and manual verification was run against commit `a1efecb` on
-2026-10-05 (the 22nd commit on top of the initial commit; the documentation
+Automated and manual verification was run against commit `4b44515` on
+2026-10-05 (the 25th commit on top of the initial commit; the documentation
 commit that follows changes no code):
 
 ```text
-python -m pytest                 194 passed, 4 deselected
+python -m pytest                 202 passed, 4 deselected
 python -m pytest -m slow         4 passed (1/10/50/100 repositories)
-python -m pytest -m requires_git 63 passed, 135 deselected
+python -m pytest -m requires_git 63 passed, 143 deselected
 ruff check app tests scripts     clean
 ruff format --check app tests scripts  clean
 ```
 
 The manual record covers a live API workflow (8 repositories, 545 commits,
 incremental rescan), a fresh-install workflow in an empty directory, a headless
-UI walk through every view and dialog, a structural UI audit (theme cycle,
-keyboard shortcuts, modal focus, chart and heatmap markup, scan progress) and the
-architecture-boundary check. The complete record — commands, observed output,
+UI walk through every view and dialog, a structural UI audit (briefing and its
+severity ordering, triage presets, theme cycle, keyboard shortcuts, modal focus,
+chart and heatmap markup, scan progress), the briefing unit tests (prose pinned to
+its inputs) and the architecture-boundary check. The complete record — commands, observed output,
 discovered bugs, known limitations and the exact commit history — is in
 [docs/verification.md](docs/verification.md).
 
@@ -348,6 +378,14 @@ merges are still counted in history, activity and contributor statistics.
 - **Incremental processing** — repeated scans avoid unnecessary work.
 - **Explicit over implicit** — unknown configuration keys, missing roots and
   unimplemented behaviour are reported, never guessed at.
+- **The story must be checkable** — the briefing is a pure function
+  (`app/analyzers/briefing.py`) over values the dashboard already computed, so
+  every sentence is unit-tested against its inputs and no claim can drift from
+  the data. Findings are ordered by severity, capped at five lines, and each one
+  carries the action it implies.
+- **No decoration without meaning** — colour encodes health, tone or severity;
+  the chart tooltip explains a point; every badge maps to a stored value. If a
+  visual element cannot be traced to data, it does not ship.
 
 ## Project status
 

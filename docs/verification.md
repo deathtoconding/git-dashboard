@@ -6,8 +6,8 @@ reproducible: every command below can be run in a clean checkout and produces
 comparable output.
 
 **Verification date:** 2026-10-05
-**Verified revision:** `a1efecb` — the twenty-second commit on top of the initial
-commit (`git rev-list --count d2f514d..a1efecb` = 22). The commit that adds this
+**Verified revision:** `4b44515` — the twenty-fifth commit on top of the initial
+commit (`git rev-list --count d2f514d..4b44515` = 25). The commit that adds this
 document changes documentation only, so the results apply to the branch tip as
 well.
 
@@ -19,7 +19,9 @@ formatting, `4eada1e` packaging, `27ba32e` documented-endpoint test, `0e850dd`
 global CLI flags, `7fcf8da` UI smoke script, `ea12a99` documentation restructure,
 `b11a8ee` bootstrap script, `3cd3a04` ruff in dev requirements, `4a557bd` design
 system, `9aac550` UI kit, `d1993e6` theme-aware charts, `2c25e28` derived
-repository fields, `72e08a3` rebuilt shell and views, `a1efecb` UI audit.
+repository fields, `72e08a3` rebuilt shell and views, `a1efecb` UI audit,
+`fe698ba` UI documentation, `e7dcb0a` briefing analyser, `9bc53e1` briefing panel,
+`4b44515` triage presets.
 
 ## Environment
 
@@ -46,9 +48,9 @@ python -m pytest -m slow -s            # performance tests, prints [perf] lines
 Observed:
 
 ```text
-python -m pytest                  194 passed, 4 deselected, 1 warning in 10.53s
-python -m pytest -m requires_git   63 passed, 135 deselected, 1 warning in 28.06s
-python -m pytest -m slow -s        4 passed, 194 deselected, 1 warning in 21.90s
+python -m pytest                  202 passed, 4 deselected, 1 warning in 10.23s
+python -m pytest -m requires_git   63 passed, 143 deselected, 1 warning in 25.81s
+python -m pytest -m slow -s        4 passed, 202 deselected, 1 warning in 21.18s
 ```
 
 The single warning is a third-party deprecation notice from
@@ -66,6 +68,7 @@ Coverage by module:
 | `test_database.py` | schema, upserts, filters, pagination, cascades, scan runs |
 | `test_collectors.py` | repository states, branch classification, incremental walks, contributors |
 | `test_analyzers.py` | metrics, activity, heatmap, churn, branch health, health transparency, insights |
+| `test_briefing.py` | the briefing prose: empty/clean workspaces, severity order, the 5-line cap, number fidelity, possessives, missing inputs, scan fallback |
 | `test_api.py` | every route, scan/export/settings, SPA fallback, architecture boundary, documented-endpoint list, index.html asset integrity |
 | `test_logging.py` | repository context, one-line records, tolerant setup |
 | `test_integration.py` | discovery → scan → SQLite → analysis → API end to end |
@@ -83,7 +86,7 @@ Observed:
 
 ```text
 All checks passed!
-56 files already formatted
+58 files already formatted
 ```
 
 ## 3. Performance
@@ -92,10 +95,10 @@ All checks passed!
 line per repository count:
 
 ```text
-[perf] repositories=  1 fixture_build=  0.04s discovery= 0.006s scan= 0.052s incremental_scan= 0.047s db=    120.0 KiB api_list=   34.4ms api_dashboard=   11.6ms api_commits=   12.8ms
-[perf] repositories= 10 fixture_build=  0.34s discovery= 0.046s scan= 0.443s incremental_scan= 0.436s db=    128.0 KiB api_list=   25.8ms api_dashboard=   17.7ms api_commits=   12.7ms
-[perf] repositories= 50 fixture_build=  1.75s discovery= 0.218s scan= 2.152s incremental_scan= 2.006s db=    288.0 KiB api_list=   27.4ms api_dashboard=   55.2ms api_commits=    9.0ms
-[perf] repositories=100 fixture_build=  3.45s discovery= 0.417s scan= 4.678s incremental_scan= 4.295s db=    448.0 KiB api_list=   69.7ms api_dashboard=  113.6ms api_commits=   12.9ms
+[perf] repositories=  1 fixture_build=  0.03s discovery= 0.005s scan= 0.041s incremental_scan= 0.040s db=    120.0 KiB api_list=   27.0ms api_dashboard=   10.2ms api_commits=    9.1ms
+[perf] repositories= 10 fixture_build=  0.31s discovery= 0.036s scan= 0.361s incremental_scan= 0.393s db=    128.0 KiB api_list=   29.8ms api_dashboard=   20.5ms api_commits=    9.1ms
+[perf] repositories= 50 fixture_build=  1.60s discovery= 0.186s scan= 2.081s incremental_scan= 1.932s db=    288.0 KiB api_list=   25.8ms api_dashboard=   56.0ms api_commits=    9.1ms
+[perf] repositories=100 fixture_build=  3.48s discovery= 0.403s scan= 3.800s incremental_scan= 3.891s db=    452.0 KiB api_list=   28.6ms api_dashboard=  100.3ms api_commits=    8.7ms
 ```
 
 Each repository contains 3 commits and ~26 KiB of `.git`. Two observations worth
@@ -215,21 +218,33 @@ commit modal: ok (Commit 9aa58f57 …)
 repository rows: 8    theme toggle: null -> light   palette: ok (1 entry after filter)
 ```
 
-`scripts/ui_audit.js` asserts that the design system is actually wired up rather
-than merely present, and finishes by driving a real scan:
+`scripts/ui_audit.js` asserts that the design system and the narrative layer are
+actually wired up rather than merely present, and finishes by driving a real
+scan:
 
 ```text
 errors: []
-theme states: light, dark, system          tabs rendered: 5
-branch rows: 22 -> 8 after the stale filter
+briefing: 2 findings need a decision (5 lines)   findings: 15 in 3 severity groups
+presets: 8 rows -> 1 dirty -> back               theme states: light, dark, system
+tabs rendered: 5                                 branch rows: 22 -> 8 after the stale filter
 scan progress indicator seen: state-dot state-dot--busy
-expectedRepositories: 8                    audits: 7
+expectedRepositories: 8                          audits: 9
 ```
+
+The narrative layer is also checked against the live payload: on the demo dataset
+the briefing reports `tone: danger`, `"2 findings need a decision"`, five lines in
+severity order (decay, uncommitted, detached HEAD, stale branches, activity), a
+"Do this first" pointing at the coldest repository, and a footer naming the last
+scan (`8 scanned · +0 commits · 289 ms` from the live job, falling back to the
+persisted `scan_runs` row after a restart).
 
 What the audit checks: 6 KPI cards with a rendered activity chart and sparkline,
 sidebar and page badges matching `/api/repositories`, health meters for every row,
-health ring plus the five weighted signal bars on the repository page, 168
-heatmap cells and 10 churn bars, `aria-selected` tracking while the audit walks
+the briefing panel (tone class, headline, summary, ≤ 5 severity-ordered lines,
+footer, "Do this first"), findings grouped into severity buckets, the triage
+presets actually narrowing the list and persisting their filter, health ring plus
+the five weighted signal bars on the repository page, 168 heatmap cells and 10
+churn bars, `aria-selected` tracking while the audit walks
 five of the six repository tabs, modal focus moving inside
 the dialog and back on close, the theme cycling light → dark → system with the
 choice persisted, `g r` keyboard navigation, persisted bucket state after a
@@ -264,6 +279,8 @@ once in the startup hook, so no request handler waits on a Git process.
 | A typo in `--config` silently used defaults (looked like "empty dashboard") | missing explicit config file was ignored | warning naming the missing file |
 | `repositories.state` NOT NULL violation when a caller omitted `state` | upsert did not default the column | defaults to `"unknown"` |
 | Overview tables showed no health and a "never" age for every repository | `/api/dashboard` returned raw rows while `/api/repositories` enriched them with derived fields | enrichment moved to `app/api/serializers.py` and used by both routes, with a test comparing the payloads |
+| Briefing could read "1 finding need a decision" and "0 repositories need a decision" | headline built from one plural helper with no subject/verb agreement, and a danger tone that can come from the average score alone | verb agreement is handled per count and a score-only danger tone reports the score instead of a zero finding count; both cases are unit-tested |
+| "1 repository failed their last scan" | fixed possessive in the scan-failure sentence | singular uses "its", plural "their" |
 | Discovery crashed on unreadable directories | `pathlib` re-raises `EACCES` from `is_dir()` | guarded; unreadable directories are skipped and counted |
 | `repo_factory(..., bare=True)` failed | helper pushed to a branch that did not exist yet (`git init -b` semantics) | helper uses `--initial-branch` and pushes `main` |
 | A wheel built from the project contained `app/` only | `packages = ["app"]` listed no subpackages | `packages.find` with `include = ["app*"]`, verified with `pip wheel` |

@@ -170,6 +170,19 @@ Fixtures live in `tests/conftest.py`: `settings` (temporary config and database)
 3. Add the endpoint to the tables in `README.md` and cover it in
    `tests/test_api.py` (including a failure case).
 
+### Add or change a briefing line
+
+1. Add the rule to `app/analyzers/briefing.py` (`add(...)` with a severity, a
+   code and an explicit order), reading only values passed into
+   `build_briefing`. Never query inside it.
+2. Every number in the sentence must come from the input: no rounding up, no
+   "about", no placeholder text. If the input can be missing, drop the sentence.
+3. Cover it in `tests/test_briefing.py` (the existing tests check number
+   fidelity, severity order, the 5-line cap, possessives and the empty case) and,
+   when the payload changes, in `tests/test_api.py`'s dashboard test.
+4. Keep the cap and the ordering: the briefing is a summary, not a report. Depth
+   belongs in the evidence layer.
+
 ### Change the database schema
 
 1. Append a new migration to `MIGRATIONS` in `app/database/schema.py` and bump
@@ -194,6 +207,11 @@ Fixtures live in `tests/conftest.py`: `settings` (temporary config and database)
 - Style with the classes in `styles.css` and its custom properties — never with
   inline hex colours, otherwise the dark theme breaks. Add new colours as
   `--*` tokens in both theme blocks.
+- The overview reads briefing → evidence → triage. If you add a figure, decide
+  which layer it belongs to: briefing (judgement, capped, tested prose), evidence
+  (tables/charts of stored values) or triage (an action that filters or links).
+  Do not repeat a briefing sentence in the evidence layer — the "All findings"
+  panel exists precisely because the briefing is capped at five lines.
 - Frontend state is persisted in `localStorage` under `git-dashboard-state-v1`
   (filters, ranges, tab) and `git-dashboard-theme` (explicit theme choice).
 - After changes, walk the UI by hand or with the optional harnesses (Node +
