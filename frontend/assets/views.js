@@ -2,48 +2,109 @@
 (function (global) {
   "use strict";
 
-  const { escapeHtml: esc, number: num, date, day, duration, queryString, stateBadge, stalenessBadge, healthBadge, healthColor, shortSha, bytes } = Fmt;
+  const { escapeHtml: esc, number: num, date, day, duration, queryString, stateBadge, stalenessBadge, healthBadge, healthColor, shortSha, bytes, avatar } = Fmt;
+
   const RANGES = [
-    { days: 7, label: "7 days" },
-    { days: 30, label: "30 days" },
-    { days: 90, label: "90 days" },
-    { days: 365, label: "1 year" },
+    { days: 7, label: "7d" },
+    { days: 30, label: "30d" },
+    { days: 90, label: "90d" },
+    { days: 365, label: "1y" },
   ];
 
-  function rangeButtons(activeDays, attribute) {
-    return `<div class="toolbar" style="gap:4px">
-      <label style="margin:0">Range</label>
-      ${RANGES.map(
-        (range) =>
-          `<button class="btn btn-sm ${range.days === activeDays ? "btn-primary" : ""}" data-${attribute}="${range.days}">${range.label}</button>`
-      ).join("")}
+  const SEVERITY = {
+    error: { icon: "error", tone: "danger", label: "error" },
+    warning: { icon: "alert", tone: "warn", label: "warning" },
+    info: { icon: "bulb", tone: "info", label: "info" },
+    ok: { icon: "check", tone: "ok", label: "ok" },
+  };
+
+  /* ---------------------------------------------------------------- pieces --- */
+
+  /** Segmented button group; `attribute` becomes `data-<attribute>` on each button. */
+  function segmented(items, active, attribute, ariaLabel) {
+    return `<div class="segmented" role="group"${ariaLabel ? ` aria-label="${esc(ariaLabel)}"` : ""}>
+      ${items
+        .map(
+          (item) =>
+            `<button type="button" data-${attribute}="${esc(item.value)}" aria-pressed="${String(item.value) === String(active)}">${esc(item.label)}</button>`
+        )
+        .join("")}
     </div>`;
   }
 
-  function emptyPanel(title, hint, action) {
-    return `<div class="empty"><h3>${esc(title)}</h3><p class="muted">${esc(hint)}</p>${action || ""}</div>`;
+  function rangeControl(activeDays, attribute) {
+    return segmented(
+      RANGES.map((range) => ({ value: range.days, label: range.label })),
+      activeDays,
+      attribute,
+      "Time range"
+    );
+  }
+
+  function emptyPanel(title, hint, action, iconName) {
+    return `<div class="empty-state">${Icons.get(iconName || "info")}
+      <h3>${esc(title)}</h3><p>${esc(hint)}</p>${action || ""}</div>`;
+  }
+
+  function panelHead(title, sub, actions, iconName) {
+    return `<div class="panel-head">
+      <div>
+        <div class="panel-title">${iconName ? Icons.get(iconName) : ""}<h2>${esc(title)}</h2></div>
+        ${sub ? `<div class="panel-sub">${sub}</div>` : ""}
+      </div>
+      ${actions ? `<div class="panel-actions">${actions}</div>` : ""}
+    </div>`;
+  }
+
+  function kpi(options) {
+    const opts = options || {};
+    return `<div class="kpi-card${opts.tone ? ` kpi-card--${opts.tone}` : ""}">
+      <div class="kpi-label">${opts.icon ? Icons.get(opts.icon) : ""}<span>${esc(opts.label)}</span></div>
+      <div class="kpi-value">${opts.value}</div>
+      <div class="kpi-foot"><span>${opts.hint || ""}</span>${opts.spark ? `<span class="kpi-spark">${opts.spark}</span>` : ""}</div>
+    </div>`;
+  }
+
+  function metaItem(label, value) {
+    return `<div class="meta-item"><div class="meta-label">${esc(label)}</div><div class="meta-value">${value}</div></div>`;
   }
 
   function insightsHtml(items) {
     if (!items || !items.length) {
-      return `<p class="muted">No issues detected across your repositories. 🎉</p>`;
+      return `<div class="empty-state empty-state--inline">${Icons.get("check")}<p>No issues detected across your repositories.</p></div>`;
     }
-    const icons = { error: "⛔", warning: "⚠️", info: "💡" };
     return items
-      .map(
-        (item) => `<div class="insight insight-${esc(item.severity)}">
-          <span class="insight-icon">${icons[item.severity] || "•"}</span>
-          <div>
-            <div><strong>${esc(item.repository_name || "Dashboard")}</strong> — ${esc(item.message)}</div>
-            ${item.action ? `<div class="action">→ ${esc(item.action)}</div>` : ""}
+      .map((item) => {
+        const severity = SEVERITY[item.severity] || SEVERITY.info;
+        return `<div class="insight insight--${severity.tone === "danger" ? "error" : severity.tone === "warn" ? "warning" : severity.tone}">
+          <span class="insight-icon">${Icons.get(severity.icon)}</span>
+          <div class="insight-body">
+            <div class="insight-meta">
+              ${item.repository_name ? `<span class="insight-repo">${esc(item.repository_name)}</span>` : ""}
+              <span class="badge badge--${severity.tone}">${esc(severity.label)}</span>
+            </div>
+            <div>${esc(item.message)}</div>
+            ${item.action ? `<div class="insight-action">${Icons.get("chevronRight")}<span>${esc(item.action)}</span></div>` : ""}
           </div>
-        </div>`
-      )
+        </div>`;
+      })
       .join("");
   }
 
   function repoLink(repository) {
-    return `<a href="/repositories/${repository.id}" data-link>${esc(repository.name)}</a>`;
+    return `<a class="cell-main" href="/repositories/${repository.id}" data-link>${esc(repository.name)}</a>`;
+  }
+
+  function branchCell(branch) {
+    return `<span class="mono">${esc(branch.current_branch || "—")}</span>${
+      branch.detached_head ? ` <span class="badge badge--warn">detached</span>` : ""
+    }`;
+  }
+
+  function healthCell(health) {
+    if (!health || health.score === undefined || health.score === null) return '<span class="muted">—</span>';
+    const score = Math.round(Number(health.score) || 0);
+    return Fmt.meter(score, { label: `${health.grade || ""} ${score}`.trim(), color: healthColor(score) });
   }
 
   function repoTable(rows, options) {
@@ -52,36 +113,54 @@
       return emptyPanel(
         "No repositories yet",
         "Add a path or configure repository roots in Settings, then scan.",
-        `<a class="btn btn-primary" href="/settings" data-link style="margin-top:10px">Open settings</a>`
+        `<a class="btn btn-primary mt-12" href="/settings" data-link>${Icons.get("settings")}Open settings</a>`,
+        "repositories"
       );
     }
-    return `<div class="table-wrap"><table>
+    const showActions = opts.actions !== false;
+    return `<div class="table-wrap"><table class="table table--rows-hover">
       <thead><tr>
-        <th>Repository</th><th>Branch</th><th>Last commit</th><th class="right">Commits</th>
-        <th class="right">Changes</th><th>Health</th><th>Status</th>${opts.actions === false ? "" : "<th></th>"}
+        <th scope="col">Repository</th>
+        <th scope="col">Branch</th>
+        <th scope="col">Last commit</th>
+        <th scope="col" class="right">Commits</th>
+        <th scope="col" class="right">Changes</th>
+        <th scope="col">Health</th>
+        <th scope="col">Status</th>
+        ${showActions ? '<th scope="col"><span class="sr-only">Actions</span></th>' : ""}
       </tr></thead>
       <tbody>
         ${rows
           .map(
             (repository) => `<tr class="clickable" data-repository="${repository.id}">
             <td>
-              <div>${repoLink(repository)}</div>
-              <div class="muted mono truncate" title="${esc(repository.path)}">${esc(repository.path)}</div>
+              <div class="row">${repoLink(repository)}</div>
+              <div class="cell-sub mono truncate" title="${esc(repository.path)}">${esc(repository.path)}</div>
             </td>
-            <td class="mono">${esc(repository.current_branch || "—")}${repository.detached_head ? ' <span class="badge badge-warn">detached</span>' : ""}</td>
-            <td class="nowrap">${repository.last_commit_at ? `${day(repository.last_commit_at)}<div class="muted">${duration(repository.days_since_last_commit)}</div>` : '<span class="muted">never</span>'}</td>
-            <td class="right mono">${num(repository.total_commits)}</td>
+            <td>${branchCell(repository)}</td>
+            <td class="nowrap">${
+              repository.last_commit_at
+                ? `${day(repository.last_commit_at)}<div class="cell-sub">${duration(repository.days_since_last_commit)}</div>`
+                : '<span class="muted">never</span>'
+            }</td>
+            <td class="right mono num">${num(repository.total_commits)}</td>
             <td class="right">${
               repository.uncommitted_files
-                ? `<span class="badge badge-warn">${num(repository.uncommitted_files)}</span>`
+                ? `<span class="badge badge--warn">${num(repository.uncommitted_files)}</span>`
                 : '<span class="muted">clean</span>'
             }</td>
-            <td>${healthBadge(repository.health)}</td>
-            <td>${stateBadge(repository)} ${stalenessBadge(repository.staleness, repository.staleness_label)}</td>
-            ${opts.actions === false ? "" : `<td class="right nowrap">
-              <button class="btn btn-sm" data-scan="${repository.id}" title="Scan this repository now">⟳</button>
-              <a class="btn btn-sm" href="/repositories/${repository.id}" data-link title="Open details">Open</a>
-            </td>`}
+            <td>${healthCell(repository.health)}</td>
+            <td><div class="row-wrap">${stateBadge(repository)}${stalenessBadge(repository.staleness, repository.staleness_label)}</div></td>
+            ${
+              showActions
+                ? `<td class="right nowrap">
+                    <div class="row" style="justify-content:flex-end">
+                      <button class="btn btn-ghost btn-icon" data-scan="${repository.id}" title="Scan this repository now" aria-label="Scan ${esc(repository.name)}">${Icons.get("scan")}</button>
+                      <a class="btn btn-sm" href="/repositories/${repository.id}" data-link>Open</a>
+                    </div>
+                  </td>`
+                : ""
+            }
           </tr>`
           )
           .join("")}
@@ -109,6 +188,7 @@
         }
       });
     });
+    UI.wireCopy(root);
   }
 
   /* --------------------------------------------------------------- dashboard */
@@ -116,52 +196,93 @@
     const days = ctx.state.activityDays || 30;
     const data = await Api.dashboard(days, "day");
     const cards = data.cards;
+    const summary = data.activity.summary;
+    const seriesValues = (data.activity.series || []).map((point) => Number(point.commits) || 0);
+    const findingCount = data.insights.length;
 
     root.innerHTML = `
-      <section class="cards">
-        <div class="card"><span class="label">Repositories</span><span class="value">${num(cards.repositories)}</span>
-          <span class="hint">${num(cards.dirty_repositories)} with uncommitted changes</span></div>
-        <div class="card ${cards.uncommitted_changes ? "alert" : ""}"><span class="label">Uncommitted changes</span><span class="value">${num(cards.uncommitted_changes)}</span>
-          <span class="hint">files across all repositories</span></div>
-        <div class="card"><span class="label">Branches</span><span class="value">${num(cards.branches)}</span>
-          <span class="hint">${num(cards.stale_branches)} stale</span></div>
-        <div class="card"><span class="label">Commits</span><span class="value">${num(cards.commits)}</span>
-          <span class="hint">${num(cards.commits_last_30d)} in the last 30 days</span></div>
-        <div class="card"><span class="label">Contributors</span><span class="value">${num(cards.contributors)}</span>
-          <span class="hint">unique author emails</span></div>
-        <div class="card ${cards.stale_repositories ? "alert" : ""}"><span class="label">Stale repositories</span><span class="value">${num(cards.stale_repositories)}</span>
-          <span class="hint">avg health ${num(cards.average_health)}</span></div>
+      <section class="kpis">
+        ${kpi({
+          label: "Repositories",
+          icon: "repositories",
+          value: num(cards.repositories),
+          hint: `${num(cards.dirty_repositories)} with uncommitted changes`,
+          tone: cards.failing_repositories ? "warn" : null,
+        })}
+        ${kpi({
+          label: "Uncommitted files",
+          icon: "file",
+          value: num(cards.uncommitted_changes),
+          hint: `across ${num(cards.dirty_repositories)} repositor${cards.dirty_repositories === 1 ? "y" : "ies"}`,
+          tone: cards.uncommitted_changes ? "warn" : null,
+        })}
+        ${kpi({
+          label: "Branches",
+          icon: "branches",
+          value: num(cards.branches),
+          hint: `${num(cards.stale_branches)} stale`,
+        })}
+        ${kpi({
+          label: "Commits",
+          icon: "commit",
+          value: num(cards.commits),
+          hint: `${num(cards.commits_last_30d)} in the last 30 days`,
+          spark: Charts.sparkline(seriesValues.slice(-30), 96, 26),
+        })}
+        ${kpi({
+          label: "Contributors",
+          icon: "user",
+          value: num(cards.contributors),
+          hint: "unique author identities",
+        })}
+        ${kpi({
+          label: "Average health",
+          icon: "zap",
+          value: `${num(cards.average_health)}<small> / 100</small>`,
+          hint: `${num(cards.stale_repositories)} stale · ${num(cards.detached_repositories)} detached`,
+          tone: cards.average_health >= 75 ? "ok" : cards.average_health >= 50 ? "warn" : "danger",
+        })}
       </section>
 
       <section class="panel">
-        <div class="panel-header">
-          <div><h2>Commit activity</h2><span class="panel-sub">Commits per day across every repository</span></div>
-          ${rangeButtons(days, "range")}
-        </div>
+        ${panelHead(
+          "Commit activity",
+          `Commits per day across every repository · last ${num(days)} days`,
+          rangeControl(days, "range"),
+          "activity"
+        )}
         <div id="activity-chart"></div>
         <div class="chart-legend">
-          <span>Total in range: <strong>${num(data.activity.summary.total)}</strong></span>
-          <span>Peak day: <strong>${num(data.activity.summary.peak)}</strong></span>
-          <span>Average/day: <strong>${data.activity.summary.average}</strong></span>
+          <span>Total in range: <strong>${num(summary.total)}</strong></span>
+          <span>Peak bucket: <strong>${num(summary.peak)}</strong></span>
+          <span>Average per bucket: <strong>${num(summary.average)}</strong></span>
+          <span>Last updated: <strong>${date(data.last_updated)}</strong></span>
         </div>
       </section>
 
       <section class="grid-2">
         <div class="panel">
-          <div class="panel-header"><h2>Repositories</h2><a href="/repositories" data-link class="btn btn-sm">View all</a></div>
+          ${panelHead(
+            "Repositories",
+            "Most recently active first",
+            `<a href="/repositories" data-link class="btn btn-sm">${Icons.get("chevronRight")}View all</a>`,
+            "repositories"
+          )}
           ${repoTable(data.repositories.slice(0, 8), { actions: false })}
         </div>
         <div class="panel">
-          <div class="panel-header">
-            <h2>Recommendations</h2>
-            <span class="panel-sub">${data.insights.length} finding(s)</span>
-          </div>
+          ${panelHead(
+            "Recommendations",
+            `${num(Math.min(data.insights.length, 8))} of ${num(findingCount)} finding${findingCount === 1 ? "" : "s"} shown`,
+            "",
+            "bulb"
+          )}
           <div id="insights">${insightsHtml(data.insights.slice(0, 8))}</div>
         </div>
       </section>
 
       <section class="panel">
-        <div class="panel-header"><h2>Recently active</h2><span class="panel-sub">Last updated ${date(data.last_updated)}</span></div>
+        ${panelHead("Recently active", "Repositories with the newest commits", "", "clock")}
         ${repoTable(data.recent_repositories, { actions: false })}
       </section>
     `;
@@ -192,56 +313,67 @@
     });
     const data = await Api.repositories(query);
     const pagination = data.pagination;
+    const statuses = ["all", "clean", "dirty", "detached", "bare", "empty", "error", "unknown"];
+    const stalenesses = ["all", "active", "inactive", "stale", "abandoned"];
+    const sorts = ["last_commit", "name", "commits", "branches", "changes", "health", "scanned"];
 
     root.innerHTML = `
       <section class="panel">
-        <div class="toolbar" style="justify-content:space-between">
+        <div class="toolbar toolbar--between">
           <div class="toolbar">
-            <div class="field"><label>Search</label><input id="filter-search" placeholder="name, path or branch" value="${esc(filters.search || "")}" /></div>
-            <div class="field"><label>Status</label>
+            <div class="field search" style="min-width:230px">
+              <label for="filter-search">Search</label>
+              ${Icons.get("search")}
+              <input id="filter-search" type="search" placeholder="name, path or branch" value="${esc(filters.search || "")}" />
+            </div>
+            <div class="field"><label for="filter-status">State</label>
               <select id="filter-status">
-                ${["all", "clean", "dirty", "detached", "bare", "empty", "error", "unknown"]
-                  .map((value) => `<option value="${value}" ${filters.status === value ? "selected" : ""}>${value}</option>`)
-                  .join("")}
+                ${statuses.map((value) => `<option value="${value}" ${filters.status === value ? "selected" : ""}>${value}</option>`).join("")}
               </select></div>
-            <div class="field"><label>Staleness</label>
+            <div class="field"><label for="filter-staleness">Staleness</label>
               <select id="filter-staleness">
-                ${["all", "active", "inactive", "stale", "abandoned"]
-                  .map((value) => `<option value="${value}" ${filters.staleness === value ? "selected" : ""}>${value}</option>`)
-                  .join("")}
+                ${stalenesses.map((value) => `<option value="${value}" ${filters.staleness === value ? "selected" : ""}>${value}</option>`).join("")}
               </select></div>
-            <div class="field"><label>Sort</label>
+            <div class="field"><label for="filter-sort">Sort</label>
               <select id="filter-sort">
-                ${["last_commit", "name", "commits", "branches", "changes", "health", "scanned"]
-                  .map((value) => `<option value="${value}" ${filters.sort === value ? "selected" : ""}>${value.replace("_", " ")}</option>`)
-                  .join("")}
+                ${sorts.map((value) => `<option value="${value}" ${filters.sort === value ? "selected" : ""}>${value.replace("_", " ")}</option>`).join("")}
               </select></div>
             <div class="field"><label>Order</label>
-              <select id="filter-order">
+              ${segmented([{ value: "desc", label: "Desc" }, { value: "asc", label: "Asc" }], filters.order, "order", "Sort order")}
+              <select id="filter-order" class="sr-only" tabindex="-1" aria-hidden="true">
                 <option value="desc" ${filters.order === "desc" ? "selected" : ""}>desc</option>
                 <option value="asc" ${filters.order === "asc" ? "selected" : ""}>asc</option>
-              </select></div>
+              </select>
+            </div>
           </div>
           <div class="toolbar">
-            <button class="btn" id="btn-discover">🔍 Discover</button>
-            <button class="btn btn-primary" id="btn-add-repo">＋ Add repository</button>
+            <button class="btn" id="btn-discover">${Icons.get("search")}Discover</button>
+            <button class="btn btn-primary" id="btn-add-repo">${Icons.get("plus")}Add repository</button>
           </div>
         </div>
       </section>
 
-      <section class="panel">
-        <div class="panel-header">
-          <h2>${num(pagination.total)} registered repository(ies)</h2>
-          <span class="panel-sub">page ${pagination.page} of ${pagination.pages}</span>
-        </div>
+      <section class="panel panel--flush">
+        ${panelHead(
+          `${num(pagination.total)} registered repositor${pagination.total === 1 ? "y" : "ies"}`,
+          `Page ${num(pagination.page)} of ${num(pagination.pages)} · ${num(perPage)} per page`,
+          ""
+        )}
         ${repoTable(data.items)}
-        ${pagination.pages > 1
-          ? `<div class="pager">
-              <button class="btn btn-sm" id="page-prev" ${pagination.page <= 1 ? "disabled" : ""}>← Previous</button>
-              <span>${pagination.page} / ${pagination.pages}</span>
-              <button class="btn btn-sm" id="page-next" ${pagination.page >= pagination.pages ? "disabled" : ""}>Next →</button>
-            </div>`
-          : ""}
+        ${
+          pagination.pages > 1
+            ? `<div class="pager" style="padding:0 18px">
+                <span class="muted">Showing ${num((pagination.page - 1) * pagination.per_page + 1)}–${num(
+                Math.min(pagination.page * pagination.per_page, pagination.total)
+              )} of ${num(pagination.total)}</span>
+                <div class="pager-buttons">
+                  <button class="btn btn-sm" id="page-prev" ${pagination.page <= 1 ? "disabled" : ""}>${Icons.get("chevronLeft")}Previous</button>
+                  <span class="mono num">${num(pagination.page)} / ${num(pagination.pages)}</span>
+                  <button class="btn btn-sm" id="page-next" ${pagination.page >= pagination.pages ? "disabled" : ""}>Next${Icons.get("chevronRight")}</button>
+                </div>
+              </div>`
+            : ""
+        }
       </section>
     `;
 
@@ -253,26 +385,54 @@
       reload();
     };
 
-    root.querySelector("#filter-search").addEventListener("input", Fmt.debounce((event) => {
-      ctx.state.repoFilters.search = event.target.value;
-      applyFilters();
-    }, 320));
+    root.querySelector("#filter-search").addEventListener(
+      "input",
+      Fmt.debounce((event) => {
+        ctx.state.repoFilters.search = event.target.value;
+        applyFilters();
+      }, 320)
+    );
     ["status", "staleness", "sort", "order"].forEach((key) => {
       root.querySelector(`#filter-${key}`).addEventListener("change", (event) => {
         ctx.state.repoFilters[key] = event.target.value;
         applyFilters();
       });
     });
+    root.querySelectorAll("[data-order]").forEach((button) => {
+      button.addEventListener("click", () => {
+        ctx.state.repoFilters.order = button.dataset.order;
+        applyFilters();
+      });
+    });
     const prev = root.querySelector("#page-prev");
     const next = root.querySelector("#page-next");
-    if (prev) prev.addEventListener("click", () => { ctx.state.repoFilters.page = pagination.page - 1; ctx.persistState(); reload(); });
-    if (next) next.addEventListener("click", () => { ctx.state.repoFilters.page = pagination.page + 1; ctx.persistState(); reload(); });
+    if (prev) {
+      prev.addEventListener("click", () => {
+        ctx.state.repoFilters.page = pagination.page - 1;
+        ctx.persistState();
+        reload();
+      });
+    }
+    if (next) {
+      next.addEventListener("click", () => {
+        ctx.state.repoFilters.page = pagination.page + 1;
+        ctx.persistState();
+        reload();
+      });
+    }
 
     root.querySelector("#btn-add-repo").addEventListener("click", async () => {
-      const value = window.prompt("Path of a local Git repository (e.g. /home/me/projects/api):");
+      const value = await UI.modal.prompt({
+        title: "Register a repository",
+        label: "Absolute path of a local Git repository",
+        placeholder: "/home/me/projects/api",
+        hint: "The dashboard never copies your code — it only reads Git metadata with the git CLI.",
+        confirmLabel: "Register",
+        icon: "plus",
+      });
       if (!value) return;
       try {
-        const result = await Api.createRepository({ path: value.trim() });
+        const result = await Api.createRepository({ path: value });
         ctx.toast(`Registered '${result.repository.name}'.`, "ok");
         ctx.pollScan();
         Api.scanRepository(result.repository.id, { incremental: true, background: true }).catch(() => {});
@@ -286,8 +446,10 @@
       try {
         const result = await Api.discover({ register: true });
         const registered = result.registered_count || 0;
-        ctx.toast(`Discovered ${result.count} repositories, registered ${registered} new.`, "ok");
-        if (result.errors && result.errors.length) ctx.toast(`${result.errors.length} directory(ies) could not be read (see server log).`, "warn", 6000);
+        ctx.toast(`Discovered ${num(result.count)} repositories, registered ${num(registered)} new.`, "ok");
+        if (result.errors && result.errors.length) {
+          ctx.toast(`${num(result.errors.length)} directory(ies) could not be read (see server log).`, "warn", 6000);
+        }
         ctx.reload();
       } catch (error) {
         ctx.toast(error.message, "error", 7000);
@@ -304,46 +466,67 @@
 
     root.innerHTML = `
       <section class="panel">
-        <div class="panel-header">
-          <div>
-            <h2>${esc(repository.name)}</h2>
-            <div class="muted mono">${esc(repository.path)}</div>
+        <div class="repo-head">
+          <div class="grow">
+            <div class="row-wrap">
+              <h2>${esc(repository.name)}</h2>
+              ${stateBadge(repository)}
+              ${stalenessBadge(repository.staleness, repository.staleness_label)}
+            </div>
+            <div class="row mt-8">
+              <span class="mono truncate muted" title="${esc(repository.path)}">${esc(repository.path)}</span>
+              ${UI.copyButton(repository.path, "repository path")}
+            </div>
           </div>
-          <div class="toolbar">
-            <button class="btn btn-primary" id="btn-scan">⟳ Refresh repository</button>
-            <button class="btn" id="btn-scan-full" title="Re-walk the complete history">Full rescan</button>
-            <button class="btn btn-danger" id="btn-remove">Remove</button>
+          <div class="panel-actions">
+            <button class="btn btn-primary" id="btn-scan">${Icons.get("scan")}Refresh</button>
+            <button class="btn" id="btn-scan-full" title="Re-walk the complete history">${Icons.get("database")}Full rescan</button>
+            <button class="btn btn-danger" id="btn-remove">${Icons.get("trash")}Remove</button>
           </div>
         </div>
-        <div class="grid-3">
-          <div><label>Current branch</label><div class="mono">${esc(repository.current_branch || "—")}${repository.detached_head ? ' <span class="badge badge-warn">detached</span>' : ""}</div></div>
-          <div><label>HEAD commit</label><div class="mono truncate" title="${esc(repository.head_commit || "")}">${shortSha(repository.head_commit)} ${esc(repository.head_subject || "")}</div></div>
-          <div><label>Last scan</label><div>${repository.last_scanned_at ? date(repository.last_scanned_at) : '<span class="muted">never scanned</span>'}</div></div>
-          <div><label>Remote</label><div class="mono truncate" title="${esc(repository.remote_url || "")}">${esc(repository.remote_url || "none")}</div></div>
-          <div><label>State</label><div>${stateBadge(repository)} ${stalenessBadge(repository.staleness, repository.staleness_label)}</div></div>
-          <div><label>Scan history</label><div>${num(detail.scans.length)} recent run(s)</div></div>
+        <div class="repo-meta mt-16">
+          ${metaItem("Current branch", branchCell(repository))}
+          ${metaItem(
+            "HEAD commit",
+            `<span class="row"><span class="mono">${shortSha(repository.head_commit)}</span>${
+              repository.head_commit ? UI.copyButton(repository.head_commit, "HEAD commit SHA") : ""
+            }</span><div class="cell-sub truncate" title="${esc(repository.head_subject || "")}">${esc(repository.head_subject || "")}</div>`
+          )}
+          ${metaItem("Last scan", repository.last_scanned_at ? date(repository.last_scanned_at) : '<span class="muted">never scanned</span>')}
+          ${metaItem("Remote", `<span class="mono truncate" title="${esc(repository.remote_url || "")}">${esc(repository.remote_url || "none")}</span>`)}
+          ${metaItem("Scan history", `${num(detail.scans.length)} recent run(s)`)}
         </div>
-        ${repository.last_error ? `<div class="insight insight-error" style="margin-top:12px"><span class="insight-icon">⛔</span><div>${esc(repository.last_error)}</div></div>` : ""}
+        ${
+          repository.last_error
+            ? `<div class="insight insight--error mt-12"><span class="insight-icon">${Icons.get("error")}</span><div class="insight-body">${esc(repository.last_error)}</div></div>`
+            : ""
+        }
       </section>
 
       <section class="grid-2">
         <div class="panel">
-          <div class="panel-header"><h2>Health score</h2><span class="panel-sub">transparent, weighted signals</span></div>
-          <div class="health-header">
-            ${Charts.healthRing(health.score)}
-            <div>
-              <div style="font-size:20px;font-weight:650">${esc(health.level)} <span class="badge badge-neutral">grade ${esc(health.grade)}</span></div>
-              <div class="muted">${esc(health.staleness.message)}</div>
-              <div class="muted">${num(health.counts.commits_30d)} commit(s) in 30 days · ${num(health.counts.local_branches)} local branch(es)</div>
+          ${panelHead("Health score", "Transparent, weighted signals", "", "zap")}
+          <div class="health-summary">
+            <div class="ring">${Charts.healthRing(health.score, 112)}</div>
+            <div class="grow">
+              <div class="row-wrap">
+                <strong style="font-size:17px">${esc(health.level)}</strong>
+                <span class="badge badge--${Fmt.healthTone(health.score)}">grade ${esc(health.grade)}</span>
+                <span class="badge badge--neutral">${num(health.counts.commits_30d)} commits / 30d</span>
+              </div>
+              <p class="muted mt-8">${esc(health.staleness.message)}</p>
+              <p class="muted">${num(health.counts.local_branches)} local branch(es) · ${num(health.counts.contributors)} contributor(s)</p>
             </div>
           </div>
-          <div style="margin-top:16px">
+          <div class="mt-16">
             ${health.signals
               .map(
                 (signal) => `<div class="signal">
-                  <span class="signal-label" title="weight ${(signal.weight * 100).toFixed(0)}%">${esc(signal.label)} <span class="muted">${(signal.weight * 100).toFixed(0)}%</span></span>
-                  <span class="signal-track"><span class="signal-fill" style="width:${Math.max(2, signal.score)}%;background:${healthColor(signal.score)}"></span></span>
-                  <span class="signal-score">${signal.score}</span>
+                  <span class="signal-label">${esc(signal.label)} <span class="signal-weight">${(signal.weight * 100).toFixed(0)}%</span></span>
+                  <span class="signal-track" role="img" aria-label="${esc(signal.label)}: ${esc(String(signal.score))} of 100">
+                    <span class="signal-fill" style="width:${Math.max(2, signal.score).toFixed(1)}%;background:${healthColor(signal.score)}"></span>
+                  </span>
+                  <span class="signal-score">${esc(String(signal.score))}</span>
                 </div>
                 <div class="signal-detail">${esc(signal.detail)}</div>`
               )
@@ -351,26 +534,47 @@
           </div>
         </div>
         <div class="panel">
-          <div class="panel-header"><h2>Actionable findings</h2><span class="panel-sub">${health.recommendations.length} recommendation(s)</span></div>
-          ${insightsHtml(health.recommendations.map((item) => ({ ...item, repository_name: repository.name })))}
-          <h3 style="margin-top:14px">Working tree</h3>
-          ${
-            health.working_tree_warnings.length
-              ? health.working_tree_warnings.map((warning) => `<div class="insight insight-${esc(warning.severity)}"><span class="insight-icon">•</span><div>${esc(warning.message)}</div></div>`).join("")
-              : '<p class="muted">Working tree is clean.</p>'
-          }
+          ${panelHead(
+            "Actionable findings",
+            `${num(health.recommendations.length)} recommendation(s)`,
+            "",
+            "bulb"
+          )}
+          ${insightsHtml(health.recommendations.map((item) => Object.assign({}, item, { repository_name: repository.name })))}
+          <h3 class="mt-16">Working tree</h3>
+          <div class="mt-8">
+            ${
+              health.working_tree_warnings.length
+                ? health.working_tree_warnings
+                    .map(
+                      (warning) => `<div class="insight insight--${warning.severity === "error" ? "error" : "warning"}">
+                        <span class="insight-icon">${Icons.get(warning.severity === "error" ? "error" : "alert")}</span>
+                        <div class="insight-body">${esc(warning.message)}</div>
+                      </div>`
+                    )
+                    .join("")
+                : `<div class="empty-state empty-state--inline">${Icons.get("check")}<p>Working tree is clean.</p></div>`
+            }
+          </div>
         </div>
       </section>
 
       <section class="panel">
-        <div class="tabs">
+        <div class="tabs" role="tablist" aria-label="Repository details">
           ${["overview", "commits", "branches", "contributors", "activity", "insights"]
-            .map((name) => `<button data-tab="${name}" class="${tab === name ? "active" : ""}">${name[0].toUpperCase() + name.slice(1)}</button>`)
+            .map(
+              (name) =>
+                `<button type="button" role="tab" data-tab="${name}" aria-selected="${tab === name}">${
+                  name[0].toUpperCase() + name.slice(1)
+                }</button>`
+            )
             .join("")}
         </div>
-        <div id="tab-content"><div class="loading">Loading…</div></div>
+        <div id="tab-content" role="tabpanel">${UI.loading()}</div>
       </section>
     `;
+
+    UI.wireCopy(root);
 
     root.querySelector("#btn-scan").addEventListener("click", async () => {
       try {
@@ -382,6 +586,14 @@
       }
     });
     root.querySelector("#btn-scan-full").addEventListener("click", async () => {
+      const confirmed = await UI.modal.confirm({
+        title: "Full rescan",
+        message: `Re-walk the complete history of '${repository.name}'?`,
+        detail: "Existing commits are kept; the scan re-reads Git metadata only.",
+        confirmLabel: "Full rescan",
+        icon: "database",
+      });
+      if (!confirmed) return;
       try {
         await Api.scanRepository(repositoryId, { incremental: false, full_history: true, background: true });
         ctx.toast("Full rescan started…", "info");
@@ -391,7 +603,15 @@
       }
     });
     root.querySelector("#btn-remove").addEventListener("click", async () => {
-      if (!window.confirm(`Remove '${repository.name}' from the dashboard? Collected data is deleted (the Git repository itself is untouched).`)) return;
+      const confirmed = await UI.modal.confirm({
+        title: "Remove repository",
+        message: `Remove '${repository.name}' from the dashboard?`,
+        detail: "Collected data is deleted. The Git repository itself is untouched.",
+        confirmLabel: "Remove",
+        danger: true,
+        icon: "trash",
+      });
+      if (!confirmed) return;
       try {
         await Api.deleteRepository(repositoryId);
         ctx.toast("Repository removed.", "ok");
@@ -406,29 +626,29 @@
       button.addEventListener("click", () => {
         ctx.state.detailTab = button.dataset.tab;
         ctx.persistState();
-        root.querySelectorAll("[data-tab]").forEach((other) => other.classList.toggle("active", other === button));
+        root.querySelectorAll("[data-tab]").forEach((other) => other.setAttribute("aria-selected", String(other === button)));
         renderTab(button.dataset.tab);
       });
     });
 
     async function renderTab(name) {
-      tabContainer.innerHTML = `<div class="loading">Loading…</div>`;
+      tabContainer.innerHTML = UI.loading();
       try {
-        if (name === "overview") await overviewTab(tabContainer, repositoryId, ctx);
+        if (name === "overview") await overviewTab(tabContainer, repositoryId);
         else if (name === "commits") await commitsTab(tabContainer, repositoryId, ctx);
         else if (name === "branches") await branchesTab(tabContainer, repositoryId, ctx);
-        else if (name === "contributors") await contributorsTab(tabContainer, repositoryId, ctx);
-        else if (name === "activity") await activityTab(tabContainer, repositoryId, ctx, repository);
+        else if (name === "contributors") await contributorsTab(tabContainer, repositoryId);
+        else if (name === "activity") await activityTab(tabContainer, repositoryId, ctx);
         else await insightsTab(tabContainer, repositoryId, ctx, health, detail);
       } catch (error) {
-        tabContainer.innerHTML = emptyPanel("Could not load this tab", error.message);
+        tabContainer.innerHTML = emptyPanel("Could not load this tab", error.message, "", "error");
       }
     }
 
     await renderTab(tab);
   }
 
-  async function overviewTab(root, repositoryId, ctx) {
+  async function overviewTab(root, repositoryId) {
     const [metricsPayload, churn, heatmap] = await Promise.all([
       Api.metrics(repositoryId),
       Api.fileChurn(repositoryId).catch(() => ({ items: [] })),
@@ -436,45 +656,52 @@
     ]);
     const metrics = metricsPayload.metrics;
     const changes = metricsPayload.changes;
-    root.innerHTML = `
-      <div class="cards">
-        <div class="card"><span class="label">Total commits</span><span class="value">${num(metrics.total_commits)}</span>
-          <span class="hint">${num(metrics.stored_commits)} stored locally</span></div>
-        <div class="card"><span class="label">Contributors</span><span class="value">${num(metrics.contributors)}</span></div>
-        <div class="card"><span class="label">Branches</span><span class="value">${num(metrics.branches)}</span>
-          <span class="hint">${num(metrics.remote_branches)} remote</span></div>
-        <div class="card"><span class="label">Tracked files</span><span class="value">${num(metrics.tracked_files)}</span></div>
-        <div class="card"><span class="label">Repository age</span><span class="value">${num(metrics.age_days)}</span>
-          <span class="hint">days between first and last commit</span></div>
-        <div class="card"><span class="label">Last commit</span><span class="value" style="font-size:16px">${metrics.latest_commit.date ? day(metrics.latest_commit.date) : "—"}</span>
-          <span class="hint">${esc(metrics.latest_commit.author || "")}</span></div>
-      </div>
+    const netLines = Number(changes.net_lines) || 0;
 
-      <div class="grid-2" style="margin-top:16px">
+    root.innerHTML = `
+      <section class="kpis">
+        ${kpi({ label: "Total commits", icon: "commit", value: num(metrics.total_commits), hint: `${num(metrics.stored_commits)} stored locally` })}
+        ${kpi({ label: "Contributors", icon: "user", value: num(metrics.contributors) })}
+        ${kpi({ label: "Branches", icon: "branches", value: num(metrics.branches), hint: `${num(metrics.remote_branches)} remote` })}
+        ${kpi({ label: "Tracked files", icon: "file", value: num(metrics.tracked_files) })}
+        ${kpi({ label: "Repository age", icon: "clock", value: `${num(metrics.age_days)}<small> days</small>`, hint: "first to last commit" })}
+        ${kpi({
+          label: "Last commit",
+          icon: "activity",
+          value: metrics.latest_commit.date ? day(metrics.latest_commit.date) : "—",
+          hint: esc(metrics.latest_commit.author || ""),
+        })}
+      </section>
+
+      <section class="grid-2 mt-16">
         <div>
           <h3>Code changes</h3>
-          <div class="grid-3">
-            <div class="card"><span class="label">Lines added</span><span class="value" style="color:#56d364">+${num(changes.lines_added)}</span></div>
-            <div class="card"><span class="label">Lines deleted</span><span class="value" style="color:#ff9490">-${num(changes.lines_deleted)}</span></div>
-            <div class="card"><span class="label">Net</span><span class="value">${changes.net_lines >= 0 ? "+" : ""}${num(changes.net_lines)}</span></div>
-            <div class="card"><span class="label">Files touched</span><span class="value">${num(changes.files_touched)}</span></div>
-            <div class="card"><span class="label">Avg / commit</span><span class="value">${num(changes.average_changes_per_commit)}</span>
-              <span class="hint">lines changed</span></div>
-            <div class="card"><span class="label">Last 30 days</span><span class="value">${num(changes.last_30_days.lines_added + changes.last_30_days.lines_deleted)}</span>
-              <span class="hint">lines changed</span></div>
+          <div class="kpis mt-8">
+            ${kpi({ label: "Lines added", value: `<span class="diff-add">+${num(changes.lines_added)}</span>` })}
+            ${kpi({ label: "Lines deleted", value: `<span class="diff-del">-${num(changes.lines_deleted)}</span>` })}
+            ${kpi({ label: "Net", value: `${netLines >= 0 ? "+" : ""}${num(netLines)}` })}
+            ${kpi({ label: "Files touched", value: num(changes.files_touched) })}
+            ${kpi({ label: "Avg / commit", value: num(changes.average_changes_per_commit), hint: "lines changed" })}
+            ${kpi({ label: "Last 30 days", value: num(changes.last_30_days.lines_added + changes.last_30_days.lines_deleted), hint: "lines changed" })}
           </div>
-          <h3 style="margin-top:16px">First commit</h3>
-          <p class="muted">${metrics.first_commit.date ? `${esc(metrics.first_commit.subject || "")} — ${esc(metrics.first_commit.author || "")} on ${day(metrics.first_commit.date)}` : "No commits stored yet."}</p>
+          <h3 class="mt-16">First commit</h3>
+          <p class="muted">${
+            metrics.first_commit.date
+              ? `${esc(metrics.first_commit.subject || "")} — ${esc(metrics.first_commit.author || "")} on ${day(metrics.first_commit.date)}`
+              : "No commits stored yet."
+          }</p>
         </div>
         <div>
-          <h3>Most changed files (churn)</h3>
-          <div id="churn-chart"></div>
+          <h3>Most changed files</h3>
+          <div id="churn-chart" class="mt-8"></div>
         </div>
-      </div>
+      </section>
 
-      <h3 style="margin-top:18px">Commit heatmap (weekday × hour, last year)</h3>
-      <div id="heatmap"></div>
+      <h3 class="mt-20">Commit heatmap</h3>
+      <p class="muted">Weekday × hour distribution over the last year. Peak hours are the darkest cells.</p>
+      <div id="heatmap" class="mt-8"></div>
     `;
+
     Charts.barChart(
       root.querySelector("#churn-chart"),
       (churn.items || []).slice(0, 10).map((item) => ({ label: item.path, value: item.churn })),
@@ -486,44 +713,54 @@
   const commitState = { page: 1, per_page: 25, search: "", author: "", since: "", until: "" };
 
   async function commitsTab(root, repositoryId, ctx) {
-    const query = queryString(commitState);
-    const data = await Api.commits(repositoryId, query);
+    const data = await Api.commits(repositoryId, queryString(commitState));
     const pagination = data.pagination;
     root.innerHTML = `
-      <div class="toolbar" style="justify-content:space-between">
+      <div class="toolbar toolbar--between">
         <div class="toolbar">
-          <div class="field"><label>Search subject or SHA</label><input id="commit-search" value="${esc(commitState.search)}" placeholder="fix, 3f2a1b…" /></div>
-          <div class="field"><label>Author</label><input id="commit-author" value="${esc(commitState.author)}" placeholder="name or email" /></div>
-          <div class="field"><label>Since</label><input id="commit-since" type="date" value="${esc(commitState.since)}" /></div>
-          <div class="field"><label>Until</label><input id="commit-until" type="date" value="${esc(commitState.until)}" /></div>
-          <button class="btn" id="commit-clear">Clear</button>
+          <div class="field search"><label for="commit-search">Search</label>${Icons.get("search")}
+            <input id="commit-search" type="search" value="${esc(commitState.search)}" placeholder="subject or SHA" /></div>
+          <div class="field"><label for="commit-author">Author</label>
+            <input id="commit-author" value="${esc(commitState.author)}" placeholder="name or email" /></div>
+          <div class="field"><label for="commit-since">Since</label>
+            <input id="commit-since" type="date" value="${esc(commitState.since)}" /></div>
+          <div class="field"><label for="commit-until">Until</label>
+            <input id="commit-until" type="date" value="${esc(commitState.until)}" /></div>
+          <button class="btn" id="commit-clear">${Icons.get("close")}Clear</button>
         </div>
-        <span class="panel-sub">${num(pagination.total)} commit(s) stored, page ${pagination.page}/${pagination.pages}</span>
+        <span class="panel-sub">${num(pagination.total)} commit(s) stored · page ${num(pagination.page)} of ${num(pagination.pages)}</span>
       </div>
-      <div class="table-wrap" style="margin-top:12px"><table>
-        <thead><tr><th>SHA</th><th>Author</th><th>Date</th><th>Message</th><th class="right">Changes</th><th class="right">Files</th></tr></thead>
+      <div class="table-wrap table-wrap--scroll mt-12"><table class="table table--rows-hover">
+        <thead><tr><th scope="col">Commit</th><th scope="col">Author</th><th scope="col">Date</th><th scope="col">Message</th>
+          <th scope="col" class="right">Changes</th><th scope="col" class="right">Files</th></tr></thead>
         <tbody>
-          ${data.items
-            .map(
-              (commit) => `<tr class="clickable" data-sha="${esc(commit.sha)}">
-              <td class="mono">${shortSha(commit.sha)}${commit.is_merge ? ' <span class="badge badge-neutral">merge</span>' : ""}</td>
-              <td>${esc(commit.author_name)}<div class="muted">${esc(commit.author_email)}</div></td>
+          ${
+            data.items
+              .map(
+                (commit) => `<tr class="clickable" data-sha="${esc(commit.sha)}">
+              <td class="mono nowrap">${shortSha(commit.sha)}${
+                  commit.is_merge ? ` <span class="badge badge--violet">${Icons.get("merge")}merge</span>` : ""
+                }</td>
+              <td><div class="row">${avatar(commit.author_name)}<span>${esc(commit.author_name)}<div class="cell-sub">${esc(commit.author_email)}</div></span></div></td>
               <td class="nowrap">${day(commit.authored_at)}</td>
-              <td>${esc(commit.subject)}${commit.refs ? `<div class="muted mono">${esc(commit.refs)}</div>` : ""}</td>
+              <td><span class="cell-main">${esc(commit.subject)}</span>${commit.refs ? `<div class="cell-sub mono truncate">${esc(commit.refs)}</div>` : ""}</td>
               <td class="right nowrap"><span class="diff-add">+${num(commit.additions)}</span> <span class="diff-del">-${num(commit.deletions)}</span></td>
-              <td class="right mono">${num(commit.files_changed)}</td>
+              <td class="right mono num">${num(commit.files_changed)}</td>
             </tr>`
-            )
-            .join("") || `<tr><td colspan="6" class="muted">No commits match these filters.</td></tr>`}
+              )
+              .join("") || `<tr><td colspan="6" class="muted center">No commits match these filters.</td></tr>`
+          }
         </tbody>
       </table></div>
-      ${pagination.pages > 1
-        ? `<div class="pager">
-            <button class="btn btn-sm" id="c-prev" ${pagination.page <= 1 ? "disabled" : ""}>← Previous</button>
-            <span>${pagination.page} / ${pagination.pages}</span>
-            <button class="btn btn-sm" id="c-next" ${pagination.page >= pagination.pages ? "disabled" : ""}>Next →</button>
-          </div>`
-        : ""}
+      ${
+        pagination.pages > 1
+          ? `<div class="pager">
+              <button class="btn btn-sm" id="c-prev" ${pagination.page <= 1 ? "disabled" : ""}>${Icons.get("chevronLeft")}Previous</button>
+              <span class="mono num">${num(pagination.page)} / ${num(pagination.pages)}</span>
+              <button class="btn btn-sm" id="c-next" ${pagination.page >= pagination.pages ? "disabled" : ""}>Next${Icons.get("chevronRight")}</button>
+            </div>`
+          : ""
+      }
     `;
 
     ["search", "author", "since", "until"].forEach((key) => {
@@ -542,35 +779,72 @@
     });
     const prev = root.querySelector("#c-prev");
     const next = root.querySelector("#c-next");
-    if (prev) prev.addEventListener("click", () => { commitState.page = pagination.page - 1; commitsTab(root, repositoryId, ctx); });
-    if (next) next.addEventListener("click", () => { commitState.page = pagination.page + 1; commitsTab(root, repositoryId, ctx); });
+    if (prev) {
+      prev.addEventListener("click", () => {
+        commitState.page = pagination.page - 1;
+        commitsTab(root, repositoryId, ctx);
+      });
+    }
+    if (next) {
+      next.addEventListener("click", () => {
+        commitState.page = pagination.page + 1;
+        commitsTab(root, repositoryId, ctx);
+      });
+    }
 
     root.querySelectorAll("tr[data-sha]").forEach((row) => {
       row.addEventListener("click", async () => {
         try {
           const payload = await Api.commit(repositoryId, row.dataset.sha);
-          ctx.showModal(`Commit ${shortSha(payload.commit.sha)}`, `
-            <div class="grid-3">
-              <div><label>Author</label><div>${esc(payload.commit.author_name)} <span class="muted">${esc(payload.commit.author_email)}</span></div></div>
-              <div><label>Authored</label><div>${date(payload.commit.authored_at)}</div></div>
-              <div><label>Committed</label><div>${date(payload.commit.committed_at)}</div></div>
-              <div><label>Parents</label><div class="mono">${payload.commit.parents ? payload.commit.parents.split(" ").map(shortSha).join(", ") : "root commit"}</div></div>
-              <div><label>Refs</label><div class="mono">${esc(payload.commit.refs || "—")}</div></div>
-              <div><label>Changes</label><div><span class="diff-add">+${num(payload.additions)}</span> <span class="diff-del">-${num(payload.deletions)}</span> in ${num(payload.file_count)} file(s)</div></div>
-            </div>
-            <h3 style="margin-top:16px">${esc(payload.commit.subject)}</h3>
-            <div class="table-wrap"><table>
-              <thead><tr><th>File</th><th>Change</th><th class="right">Added</th><th class="right">Deleted</th></tr></thead>
-              <tbody>
-                ${payload.files
-                  .map(
-                    (file) => `<tr><td class="mono">${esc(file.path)}</td><td><span class="badge badge-neutral">${esc(file.change_type)}</span></td>
-                      <td class="right diff-add">+${num(file.additions)}</td><td class="right diff-del">-${num(file.deletions)}</td></tr>`
-                  )
-                  .join("") || `<tr><td colspan="4" class="muted">No file statistics stored for this commit (for example a merge commit).</td></tr>`}
-              </tbody>
-            </table></div>
-          `);
+          const commit = payload.commit;
+          const parents = commit.parents ? commit.parents.split(" ").filter(Boolean) : [];
+          UI.modal.open({
+            title: `Commit ${shortSha(commit.sha)}`,
+            icon: commit.is_merge ? "merge" : "commit",
+            wide: true,
+            html: `
+              <div class="row-wrap">
+                ${avatar(commit.author_name, "avatar--lg")}
+                <div class="grow">
+                  <div><strong>${esc(commit.author_name)}</strong> <span class="muted">${esc(commit.author_email)}</span></div>
+                  <div class="cell-sub">Authored ${date(commit.authored_at)} · committed ${date(commit.committed_at)}</div>
+                </div>
+                <div class="row">
+                  <span class="badge badge--ok">${Icons.get("plus")}${num(payload.additions)}</span>
+                  <span class="badge badge--danger">${Icons.get("close")}${num(payload.deletions)}</span>
+                  <span class="badge badge--neutral">${num(payload.file_count)} file(s)</span>
+                  ${UI.copyButton(commit.sha, "full commit SHA")}
+                </div>
+              </div>
+              <h3 class="mt-16">${esc(commit.subject)}</h3>
+              ${commit.body ? `<pre class="commit-body">${esc(commit.body)}</pre>` : ""}
+              <div class="kv mt-16">
+                ${metaItem("SHA", `<span class="mono">${esc(commit.sha)}</span>`)}
+                ${metaItem("Parents", parents.length ? `<span class="mono">${parents.map((sha) => shortSha(sha)).join(", ")}</span>` : '<span class="muted">root commit</span>')}
+                ${metaItem("Refs", `<span class="mono">${esc(commit.refs || "—")}</span>`)}
+                ${metaItem("Merge commit", commit.is_merge ? "yes" : "no")}
+              </div>
+              <div class="table-wrap mt-16"><table class="table">
+                <thead><tr><th scope="col">File</th><th scope="col">Change</th><th scope="col" class="right">Added</th><th scope="col" class="right">Deleted</th></tr></thead>
+                <tbody>
+                  ${
+                    payload.files
+                      .map(
+                        (file) => `<tr><td class="mono">${esc(file.path)}</td>
+                        <td><span class="badge badge--neutral">${esc(file.change_type)}</span></td>
+                        <td class="right diff-add">+${num(file.additions)}</td>
+                        <td class="right diff-del">-${num(file.deletions)}</td></tr>`
+                      )
+                      .join("") ||
+                    `<tr><td colspan="4" class="muted">${esc(
+                      payload.note || "No file statistics stored for this commit."
+                    )}</td></tr>`
+                  }
+                </tbody>
+              </table></div>
+            `,
+          });
+          UI.wireCopy(document.getElementById("modal-body"));
         } catch (error) {
           ctx.toast(error.message, "error");
         }
@@ -578,45 +852,55 @@
     });
   }
 
+  function branchStatusBadge(branch) {
+    if (branch.is_stale) return '<span class="badge badge--warn">stale</span>';
+    if (branch.is_inactive) return '<span class="badge badge--info">inactive</span>';
+    if (branch.is_merged) return '<span class="badge badge--violet">merged</span>';
+    if (branch.is_current) return '<span class="badge badge--ok">current</span>';
+    return '<span class="badge badge--neutral">active</span>';
+  }
+
   async function branchesTab(root, repositoryId, ctx, filter) {
     const activeFilter = filter || "all";
     const data = await Api.branches(repositoryId, queryString({ filter: activeFilter }));
     const summary = data.summary || {};
+    const filters = ["all", "current", "active", "inactive", "stale", "merged"];
     root.innerHTML = `
-      <div class="toolbar" style="justify-content:space-between">
-        <div class="toolbar">
-          <label style="margin:0">Filter</label>
-          ${["all", "current", "active", "inactive", "stale", "merged"]
-            .map((value) => `<button class="btn btn-sm ${activeFilter === value ? "btn-primary" : ""}" data-branch-filter="${value}">${value}</button>`)
-            .join("")}
-        </div>
-        <span class="panel-sub">${num(summary.local_branches || 0)} local · ${num(summary.remote_branches || 0)} remote · ${num(summary.stale_branches || 0)} stale (≥ ${summary.thresholds ? summary.thresholds.stale_days : 90} days)</span>
+      <div class="toolbar toolbar--between">
+        ${segmented(
+          filters.map((value) => ({ value, label: value[0].toUpperCase() + value.slice(1) })),
+          activeFilter,
+          "branch-filter",
+          "Branch filter"
+        )}
+        <span class="panel-sub">${num(summary.local_branches || 0)} local · ${num(summary.remote_branches || 0)} remote · ${num(
+      summary.stale_branches || 0
+    )} stale (≥ ${num(summary.thresholds ? summary.thresholds.stale_days : 90)} days)</span>
       </div>
-      <div class="table-wrap" style="margin-top:12px"><table>
-        <thead><tr><th>Branch</th><th>Last commit</th><th>Subject</th><th class="right">Age</th><th>Track</th><th>Status</th></tr></thead>
+      <div class="table-wrap table-wrap--scroll mt-12"><table class="table table--rows-hover">
+        <thead><tr><th scope="col">Branch</th><th scope="col">Last commit</th><th scope="col">Subject</th>
+          <th scope="col" class="right">Age</th><th scope="col">Track</th><th scope="col">Status</th></tr></thead>
         <tbody>
-          ${data.items
-            .map(
-              (branch) => `<tr ${branch.is_stale ? 'style="background:rgba(210,153,34,0.06)"' : ""}>
-              <td class="mono">${esc(branch.name)}${branch.is_current ? ' <span class="badge badge-ok">current</span>' : ""}</td>
+          ${
+            data.items
+              .map(
+                (branch) => `<tr>
+              <td class="mono">${esc(branch.name)}${branch.is_current ? ' <span class="badge badge--ok">head</span>' : ""}</td>
               <td class="nowrap">${branch.last_commit_at ? day(branch.last_commit_at) : "—"}</td>
               <td><span class="truncate" title="${esc(branch.subject || "")}">${esc(branch.subject || "")}</span></td>
-              <td class="right">${num(branch.age_days)} d</td>
-              <td class="mono muted">${branch.upstream ? `${esc(branch.upstream)} ${branch.ahead ? `↑${branch.ahead}` : ""}${branch.behind ? ` ↓${branch.behind}` : ""}` : "—"}</td>
-              <td>${
-                branch.is_stale
-                  ? '<span class="badge badge-warn">stale</span>'
-                  : branch.is_inactive
-                  ? '<span class="badge badge-info">inactive</span>'
-                  : branch.is_merged
-                  ? '<span class="badge badge-purple">merged</span>'
-                  : branch.is_current
-                  ? '<span class="badge badge-ok">current</span>'
-                  : '<span class="badge badge-neutral">active</span>'
+              <td class="right num">${num(branch.age_days)} d</td>
+              <td class="mono muted">${
+                branch.upstream
+                  ? `${esc(branch.upstream)}${
+                      branch.ahead ? ` <span class="diff-add">↑${num(branch.ahead)}</span>` : ""
+                    }${branch.behind ? ` <span class="diff-del">↓${num(branch.behind)}</span>` : ""}`
+                  : "—"
               }</td>
+              <td>${branchStatusBadge(branch)}</td>
             </tr>`
-            )
-            .join("") || `<tr><td colspan="6" class="muted">No branches match this filter.</td></tr>`}
+              )
+              .join("") || `<tr><td colspan="6" class="muted center">No branches match this filter.</td></tr>`
+          }
         </tbody>
       </table></div>
     `;
@@ -627,73 +911,86 @@
 
   async function contributorsTab(root, repositoryId) {
     const data = await Api.contributors(repositoryId);
+    const items = data.items || [];
+    const top = items[0];
     root.innerHTML = `
       <div class="grid-2">
-        <div>
-          <div class="table-wrap"><table>
-            <thead><tr><th>Contributor</th><th class="right">Commits</th><th class="right">Added</th><th class="right">Deleted</th><th class="right">Net</th><th>Last activity</th><th class="right">Share</th></tr></thead>
-            <tbody>
-              ${data.items
+        <div class="table-wrap table-wrap--scroll"><table class="table table--rows-hover">
+          <thead><tr><th scope="col">Contributor</th><th scope="col" class="right">Commits</th><th scope="col" class="right">Added</th>
+            <th scope="col" class="right">Deleted</th><th scope="col" class="right">Net</th><th scope="col">Last activity</th><th scope="col" class="right">Share</th></tr></thead>
+          <tbody>
+            ${
+              items
                 .map(
                   (item) => `<tr>
-                  <td>${esc(item.name)}<div class="muted">${esc(item.email || "no email")}</div></td>
-                  <td class="right mono">${num(item.commit_count)}</td>
-                  <td class="right diff-add">+${num(item.additions)}</td>
-                  <td class="right diff-del">-${num(item.deletions)}</td>
-                  <td class="right mono">${item.net_lines >= 0 ? "+" : ""}${num(item.net_lines)}</td>
-                  <td class="nowrap">${item.last_commit_at ? day(item.last_commit_at) : "—"}</td>
-                  <td class="right mono">${item.share}%</td>
-                </tr>`
+                <td><div class="row">${avatar(item.name)}<span>${esc(item.name)}<div class="cell-sub">${esc(item.email || "no email")}</div></span></div></td>
+                <td class="right mono num">${num(item.commit_count)}</td>
+                <td class="right diff-add">+${num(item.additions)}</td>
+                <td class="right diff-del">-${num(item.deletions)}</td>
+                <td class="right mono num">${item.net_lines >= 0 ? "+" : ""}${num(item.net_lines)}</td>
+                <td class="nowrap">${item.last_commit_at ? day(item.last_commit_at) : "—"}</td>
+                <td class="right">${Fmt.meter(item.share, { max: 100, label: `${item.share}%`, color: "var(--accent)" })}</td>
+              </tr>`
                 )
-                .join("") || `<tr><td colspan="7" class="muted">No contributors collected yet.</td></tr>`}
-            </tbody>
-          </table></div>
-        </div>
+                .join("") || `<tr><td colspan="7" class="muted center">No contributors collected yet.</td></tr>`
+            }
+          </tbody>
+        </table></div>
         <div>
-          <h3>Commits per contributor</h3>
+          ${panelHead("Commits per contributor", "Ranked by stored commits", "", "user")}
           <div id="contributor-chart"></div>
+          ${top ? `<p class="tooltip-note mt-12">${esc(top.name)} leads with ${num(top.commit_count)} commit(s), ${num(top.share)}% of the stored history.</p>` : ""}
         </div>
       </div>
     `;
     Charts.barChart(
       root.querySelector("#contributor-chart"),
-      data.items.slice(0, 12).map((item) => ({ label: item.name, value: item.commit_count })),
+      items.slice(0, 12).map((item) => ({ label: item.name, value: item.commit_count })),
       { emptyMessage: "No contributors collected yet." }
     );
   }
 
-  async function activityTab(root, repositoryId, ctx, repository) {
+  async function activityTab(root, repositoryId, ctx) {
     const days = ctx.state.detailDays || 90;
     const data = await Api.repoActivity(repositoryId, days, "day");
     const metrics = data.metrics;
+    const trendTone = /up|grow|rising|increas/i.test(metrics.trend) ? "up" : /down|declin|fall|decreas/i.test(metrics.trend) ? "down" : "flat";
     root.innerHTML = `
-      <div class="toolbar" style="justify-content:space-between">
-        ${rangeButtons(days, "detail-range")}
-        <span class="panel-sub">Trend: <strong>${esc(metrics.trend)}</strong> (this week ${num(metrics.week_over_week.current)} vs ${num(metrics.week_over_week.previous)} last week)</span>
+      <div class="toolbar toolbar--between">
+        ${rangeControl(days, "detail-range")}
+        <span class="panel-sub">Trend: <span class="kpi-delta kpi-delta--${trendTone}"><strong>${esc(metrics.trend)}</strong></span>
+          · this week ${num(metrics.week_over_week.current)} vs ${num(metrics.week_over_week.previous)} last week</span>
       </div>
-      <div id="detail-chart" style="margin-top:12px"></div>
+      <div id="detail-chart" class="mt-12"></div>
       <div class="chart-legend">
         <span>Total: <strong>${num(data.summary.total)}</strong></span>
         <span>Peak: <strong>${num(data.summary.peak)}</strong></span>
-        <span>Average/day: <strong>${data.summary.average}</strong></span>
+        <span>Average/day: <strong>${num(data.summary.average)}</strong></span>
+        <span>Buckets: <strong>${num(data.summary.buckets)}</strong></span>
       </div>
-      <div class="cards" style="margin-top:16px">
-        <div class="card"><span class="label">Today</span><span class="value">${num(metrics.commits.today)}</span></div>
-        <div class="card"><span class="label">This week</span><span class="value">${num(metrics.commits.week)}</span></div>
-        <div class="card"><span class="label">This month</span><span class="value">${num(metrics.commits.month)}</span></div>
-        <div class="card"><span class="label">Commits / day (lifetime)</span><span class="value">${metrics.commits_per_day}</span></div>
-        <div class="card"><span class="label">Commits / week (90d)</span><span class="value">${metrics.commits_per_week}</span></div>
-        <div class="card"><span class="label">Active contributors (30d)</span><span class="value">${num(metrics.active_contributors_30d)}</span>
-          <span class="hint">${num(metrics.inactive_contributors_30d)} inactive before that</span></div>
-      </div>
-      <p class="tooltip-note" style="margin-top:10px">Days since last commit: ${num(metrics.days_since_last_commit)} · repository age: ${num(metrics.lifetime_days)} days · first commit ${metrics.first_commit_at ? day(metrics.first_commit_at) : "—"}</p>
+      <section class="kpis mt-16">
+        ${kpi({ label: "Today", icon: "commit", value: num(metrics.commits.today) })}
+        ${kpi({ label: "This week", icon: "activity", value: num(metrics.commits.week) })}
+        ${kpi({ label: "This month", icon: "chart", value: num(metrics.commits.month) })}
+        ${kpi({ label: "Commits / day", icon: "clock", value: metrics.commits_per_day, hint: "lifetime average" })}
+        ${kpi({ label: "Commits / week", icon: "clock", value: metrics.commits_per_week, hint: "last 90 days" })}
+        ${kpi({
+          label: "Active contributors",
+          icon: "user",
+          value: num(metrics.active_contributors_30d),
+          hint: `${num(metrics.inactive_contributors_30d)} inactive before that`,
+        })}
+      </section>
+      <p class="tooltip-note mt-12">Days since last commit: ${num(metrics.days_since_last_commit)} · repository age: ${num(
+      metrics.lifetime_days
+    )} days · first commit ${metrics.first_commit_at ? day(metrics.first_commit_at) : "—"}</p>
     `;
     Charts.lineChart(root.querySelector("#detail-chart"), data.series);
     root.querySelectorAll("[data-detail-range]").forEach((button) => {
       button.addEventListener("click", () => {
         ctx.state.detailDays = Number(button.dataset.detailRange);
         ctx.persistState();
-        activityTab(root, repositoryId, ctx, repository);
+        activityTab(root, repositoryId, ctx);
       });
     });
   }
@@ -703,35 +1000,50 @@
       <div class="grid-2">
         <div>
           <h3>Recommendations</h3>
-          ${insightsHtml(health.recommendations)}
-          <h3 style="margin-top:14px">Staleness</h3>
+          <div class="mt-8">${insightsHtml(health.recommendations)}</div>
+          <h3 class="mt-16">Staleness</h3>
           <p>${stalenessBadge(health.staleness.bucket, health.staleness.label)} ${esc(health.staleness.message)}</p>
-          <h3 style="margin-top:14px">Branch hygiene</h3>
+          <h3 class="mt-16">Branch hygiene</h3>
           <ul class="muted">
             <li>${num(health.branch_health.total_branches)} branch(es) total, ${num(health.branch_health.local_branches)} local</li>
-            <li>${num(health.branch_health.stale_branches)} stale, ${num(health.branch_health.inactive_branches)} inactive, ${num(health.branch_health.merged_branches)} merged</li>
-            ${health.branch_health.stale_branch_names.length ? `<li>Stale: <span class="mono">${esc(health.branch_health.stale_branch_names.slice(0, 8).join(", "))}</span></li>` : ""}
+            <li>${num(health.branch_health.stale_branches)} stale, ${num(health.branch_health.inactive_branches)} inactive, ${num(
+      health.branch_health.merged_branches
+    )} merged</li>
+            ${
+              health.branch_health.stale_branch_names.length
+                ? `<li>Stale: <span class="mono">${esc(health.branch_health.stale_branch_names.slice(0, 8).join(", "))}</span></li>`
+                : ""
+            }
           </ul>
         </div>
         <div>
           <h3>Recent scans</h3>
-          <div class="table-wrap"><table>
-            <thead><tr><th>Started</th><th>Kind</th><th>Status</th><th class="right">Records</th><th class="right">Duration</th></tr></thead>
+          <div class="table-wrap table-wrap--scroll mt-8"><table class="table table--rows-hover table--compact">
+            <thead><tr><th scope="col">Started</th><th scope="col">Kind</th><th scope="col">Status</th>
+              <th scope="col" class="right">Records</th><th scope="col" class="right">Duration</th></tr></thead>
             <tbody>
-              ${detail.scans
-                .map(
-                  (scan) => `<tr>
+              ${
+                detail.scans
+                  .map(
+                    (scan) => `<tr>
                   <td class="nowrap">${date(scan.started_at)}</td>
                   <td>${esc(scan.kind)}</td>
-                  <td><span class="badge ${scan.status === "completed" ? "badge-ok" : scan.status === "failed" ? "badge-bad" : "badge-warn"}">${esc(scan.status)}</span></td>
-                  <td class="right mono">${num(scan.records_processed)}</td>
-                  <td class="right mono">${scan.duration_ms ? `${num(scan.duration_ms)} ms` : "—"}</td>
+                  <td><span class="badge badge--${
+                    scan.status === "completed" ? "ok" : scan.status === "failed" ? "danger" : "warn"
+                  }">${esc(scan.status)}</span></td>
+                  <td class="right mono num">${num(scan.records_processed)}</td>
+                  <td class="right mono num">${scan.duration_ms ? `${num(scan.duration_ms)} ms` : "—"}</td>
                 </tr>`
-                )
-                .join("") || `<tr><td colspan="5" class="muted">No scans recorded yet.</td></tr>`}
+                  )
+                  .join("") || `<tr><td colspan="5" class="muted center">No scans recorded yet.</td></tr>`
+              }
             </tbody>
           </table></div>
-          ${detail.scans.some((scan) => scan.error) ? `<p class="tooltip-note">Last error: ${esc((detail.scans.find((scan) => scan.error) || {}).error || "")}</p>` : ""}
+          ${
+            detail.scans.some((scan) => scan.error)
+              ? `<p class="tooltip-note mt-8">Last error: ${esc((detail.scans.find((scan) => scan.error) || {}).error || "")}</p>`
+              : ""
+          }
         </div>
       </div>
     `;
@@ -741,49 +1053,53 @@
   async function activity(root, ctx) {
     const days = ctx.state.activityDays || 30;
     const bucket = ctx.state.bucket || "day";
-    const [data, byRepo] = await Promise.all([Api.activity(days, bucket), Api.get(`/activity/repositories?days=${days}`)]);
+    const [data, byRepo] = await Promise.all([Api.activity(days, bucket), Api.activityByRepository(days, bucket)]);
+    const chartId = bucket === "day" && days <= 14 ? "activity-chart" : "activity-chart";
     root.innerHTML = `
       <section class="panel">
-        <div class="panel-header">
-          <div><h2>Commit activity</h2><span class="panel-sub">across every registered repository</span></div>
-          <div class="toolbar">
-            ${rangeButtons(days, "range")}
-            <div class="field"><label>Bucket</label>
-              <select id="bucket">
-                ${["day", "week", "month"].map((value) => `<option value="${value}" ${bucket === value ? "selected" : ""}>${value}</option>`).join("")}
-              </select></div>
-          </div>
-        </div>
-        <div id="activity-chart"></div>
+        ${panelHead(
+          "Commit activity",
+          `Across every registered repository · last ${num(days)} days`,
+          `${rangeControl(days, "range")}
+           <div class="field" style="min-width:120px"><label for="bucket">Bucket</label>
+             <select id="bucket">${["day", "week", "month"]
+               .map((value) => `<option value="${value}" ${bucket === value ? "selected" : ""}>${value}</option>`)
+               .join("")}</select></div>`,
+          "activity"
+        )}
+        <div id="${chartId}"></div>
         <div class="chart-legend">
           <span>Total: <strong>${num(data.summary.total)}</strong></span>
           <span>Peak: <strong>${num(data.summary.peak)}</strong></span>
-          <span>Average: <strong>${data.summary.average}</strong></span>
+          <span>Average: <strong>${num(data.summary.average)}</strong></span>
           <span>Buckets: <strong>${num(data.summary.buckets)}</strong></span>
         </div>
       </section>
       <section class="panel">
-        <div class="panel-header"><h2>Per repository</h2><span class="panel-sub">commits in the last ${days} days</span></div>
-        <div class="table-wrap"><table>
-          <thead><tr><th>Repository</th><th class="right">Commits in range</th><th class="right">All time</th><th>Last commit</th><th>Health</th><th>Status</th></tr></thead>
+        ${panelHead("Per repository", `Commits in the last ${num(days)} days`, "", "repositories")}
+        <div class="table-wrap table-wrap--scroll"><table class="table table--rows-hover">
+          <thead><tr><th scope="col">Repository</th><th scope="col" class="right">Commits in range</th>
+            <th scope="col" class="right">All time</th><th scope="col">Last commit</th><th scope="col">Health</th><th scope="col">Staleness</th></tr></thead>
           <tbody>
-            ${(byRepo.items || [])
-              .map(
-                (row) => `<tr class="clickable" data-repository="${row.id}">
-                <td>${esc(row.name)}<div class="muted mono truncate">${esc(row.path)}</div></td>
-                <td class="right mono">${num(row.commits)}</td>
-                <td class="right mono">${num(row.total_commits)}</td>
+            ${
+              (byRepo.items || [])
+                .map(
+                  (row) => `<tr class="clickable" data-repository="${row.id}">
+                <td><span class="cell-main">${esc(row.name)}</span><div class="cell-sub mono truncate">${esc(row.path)}</div></td>
+                <td class="right mono num">${num(row.commits)}</td>
+                <td class="right mono num">${num(row.total_commits)}</td>
                 <td class="nowrap">${row.last_commit_at ? day(row.last_commit_at) : '<span class="muted">never</span>'}</td>
                 <td>${healthBadge({ score: row.health_score, grade: row.health_grade })}</td>
                 <td>${stalenessBadge(row.staleness, row.staleness)}</td>
               </tr>`
-              )
-              .join("") || `<tr><td colspan="6" class="muted">No repositories registered yet.</td></tr>`}
+                )
+                .join("") || `<tr><td colspan="6" class="muted center">No repositories registered yet.</td></tr>`
+            }
           </tbody>
         </table></div>
       </section>
     `;
-    Charts.lineChart(root.querySelector("#activity-chart"), data.series);
+    Charts.lineChart(root.querySelector(`#${chartId}`), data.series);
     root.querySelectorAll("[data-range]").forEach((button) => {
       button.addEventListener("click", () => {
         ctx.state.activityDays = Number(button.dataset.range);
@@ -806,43 +1122,41 @@
     const filter = ctx.state.branchFilter || "all";
     const search = ctx.state.branchSearch || "";
     const data = await Api.allBranches(queryString({ filter, search }));
+    const filters = ["all", "current", "active", "stale", "merged"];
     root.innerHTML = `
-      <section class="panel">
-        <div class="panel-header">
-          <div><h2>Branches</h2><span class="panel-sub">${num(data.count)} branch(es) · stale threshold ${num(data.thresholds.stale_days)} days</span></div>
-          <div class="toolbar">
-            <div class="field"><label>Search</label><input id="branch-search" value="${esc(search)}" placeholder="branch or repository" /></div>
-            <label style="margin:0">Filter</label>
-            ${["all", "current", "active", "stale", "merged"]
-              .map((value) => `<button class="btn btn-sm ${filter === value ? "btn-primary" : ""}" data-branch-filter="${value}">${value}</button>`)
-              .join("")}
-          </div>
-        </div>
-        <div class="table-wrap"><table>
-          <thead><tr><th>Repository</th><th>Branch</th><th>Last commit</th><th class="right">Age</th><th>Track</th><th>Status</th></tr></thead>
+      <section class="panel panel--flush">
+        ${panelHead(
+          "Branches",
+          `${num(data.count)} branch(es) · stale threshold ${num(data.thresholds.stale_days)} days`,
+          `<div class="field search" style="min-width:210px">${Icons.get("search")}
+             <input id="branch-search" type="search" value="${esc(search)}" placeholder="branch or repository" aria-label="Search branches" /></div>
+           ${segmented(
+             filters.map((value) => ({ value, label: value[0].toUpperCase() + value.slice(1) })),
+             filter,
+             "branch-filter",
+             "Branch filter"
+           )}`,
+          "branches"
+        )}
+        <div class="table-wrap table-wrap--scroll"><table class="table table--rows-hover">
+          <thead><tr><th scope="col">Repository</th><th scope="col">Branch</th><th scope="col">Last commit</th>
+            <th scope="col" class="right">Age</th><th scope="col">Track</th><th scope="col">Status</th></tr></thead>
           <tbody>
-            ${data.items
-              .map(
-                (branch) => `<tr class="clickable" data-repository="${branch.repository_id}" ${branch.is_stale ? 'style="background:rgba(210,153,34,0.06)"' : ""}>
-                <td>${esc(branch.repository_name)}</td>
-                <td class="mono">${esc(branch.name)}${branch.is_current ? ' <span class="badge badge-ok">current</span>' : ""}</td>
+            ${
+              data.items
+                .map(
+                  (branch) => `<tr class="clickable" data-repository="${branch.repository_id}">
+                <td class="cell-main">${esc(branch.repository_name)}</td>
+                <td class="mono">${esc(branch.name)}${branch.is_current ? ' <span class="badge badge--ok">head</span>' : ""}</td>
                 <td class="nowrap">${branch.last_commit_at ? day(branch.last_commit_at) : "—"}</td>
-                <td class="right">${num(branch.age_days)} d</td>
+                <td class="right num">${num(branch.age_days)} d</td>
                 <td class="mono muted">${branch.upstream ? esc(branch.upstream) : "—"}</td>
-                <td>${
-                  branch.is_stale
-                    ? '<span class="badge badge-warn">stale</span>'
-                    : branch.is_merged
-                    ? '<span class="badge badge-purple">merged</span>'
-                    : branch.is_remote
-                    ? '<span class="badge badge-neutral">remote</span>'
-                    : branch.is_current
-                    ? '<span class="badge badge-ok">current</span>'
-                    : '<span class="badge badge-neutral">active</span>'
-                }</td>
+                <td>${branchStatusBadge(branch)}</td>
               </tr>`
-              )
-              .join("") || `<tr><td colspan="6" class="muted">No branches match these filters. Scan a repository to collect branches.</td></tr>`}
+                )
+                .join("") ||
+              `<tr><td colspan="6" class="muted center">No branches match these filters. Scan a repository to collect branches.</td></tr>`
+            }
           </tbody>
         </table></div>
       </section>
@@ -857,95 +1171,135 @@
         ctx.reload();
       });
     });
-    root.querySelector("#branch-search").addEventListener("input", Fmt.debounce((event) => {
-      ctx.state.branchSearch = event.target.value;
-      ctx.persistState();
-      ctx.reload();
-    }, 320));
+    root.querySelector("#branch-search").addEventListener(
+      "input",
+      Fmt.debounce((event) => {
+        ctx.state.branchSearch = event.target.value;
+        ctx.persistState();
+        ctx.reload();
+      }, 320)
+    );
   }
 
   /* ---------------------------------------------------------------- settings */
   async function settings(root, ctx) {
     const [payload, health] = await Promise.all([Api.settings(), Api.health()]);
-    const settings = payload.settings;
+    const settingsPayload = payload.settings;
+    const numberField = (key, label, options) => {
+      const opts = options || {};
+      return `<div class="field"><label for="s-${key}">${esc(label)}</label>
+        <input id="s-${key}" type="number" min="${opts.min === undefined ? 0 : opts.min}"${
+        opts.max ? ` max="${opts.max}"` : ""
+      } value="${settingsPayload[key]}" /></div>`;
+    };
+    const textField = (key, label) => `<div class="field"><label for="s-${key}">${esc(label)}</label>
+      <input id="s-${key}" value="${esc(settingsPayload[key])}" /></div>`;
+
     root.innerHTML = `
       <section class="grid-2">
         <div class="panel">
-          <div class="panel-header"><h2>Repository roots</h2><span class="panel-sub">folders scanned for Git repositories</span></div>
-          <div class="field">
-            <label>One absolute path per line</label>
-            <textarea id="roots" rows="5" placeholder="/home/me/projects">${esc((settings.repository_roots || []).join("\n"))}</textarea>
+          ${panelHead("Repository roots", "Folders scanned for Git repositories", "", "search")}
+          <div class="field" id="settings-roots">
+            <label for="roots">One absolute path per line</label>
+            <textarea id="roots" rows="5" placeholder="/home/me/projects">${esc((settingsPayload.repository_roots || []).join("\n"))}</textarea>
           </div>
-          <div class="toolbar" style="margin-top:10px">
-            <button class="btn btn-primary" id="save-roots">Save roots</button>
-            <button class="btn" id="discover">Discover now</button>
-            <button class="btn" id="register-new" title="Register every newly discovered repository">Register new &amp; scan</button>
+          <div class="toolbar mt-12">
+            <button class="btn btn-primary" id="save-roots">${Icons.get("check")}Save roots</button>
+            <button class="btn" id="discover">${Icons.get("search")}Discover now</button>
+            <button class="btn" id="register-new" title="Register every newly discovered repository">${Icons.get("plus")}Register new &amp; scan</button>
           </div>
-          <div id="roots-status" style="margin-top:10px"></div>
+          <div id="roots-status" class="mt-12"></div>
         </div>
 
         <div class="panel">
-          <div class="panel-header"><h2>System</h2><span class="panel-sub">git-dashboard ${esc(health.version)}</span></div>
-          <div class="grid-3">
-            <div><label>Git</label><div>${health.git_available ? `<span class="badge badge-ok">v${esc(health.git_version || "?")}</span>` : '<span class="badge badge-bad">not found</span>'}</div></div>
-            <div><label>Binary</label><div class="mono">${esc(health.git_binary)}</div></div>
-            <div><label>Schema</label><div class="mono">v${num(health.database.schema_version)}</div></div>
-            <div><label>Repositories</label><div class="mono">${num(health.database.imported_repositories)}</div></div>
-            <div><label>Database size</label><div class="mono">${bytes(health.database.size_bytes)}</div></div>
-            <div><label>Status</label><div>${health.warnings.length ? '<span class="badge badge-warn">degraded</span>' : '<span class="badge badge-ok">ok</span>'}</div></div>
+          ${panelHead("System", `git-dashboard ${esc(health.version)}`, "", "database")}
+          <div class="kv">
+            ${metaItem("Git", health.git_available ? `<span class="badge badge--ok">v${esc(health.git_version || "?")}</span>` : '<span class="badge badge--danger">not found</span>')}
+            ${metaItem("Git binary", `<span class="mono">${esc(health.git_binary)}</span>`)}
+            ${metaItem("Schema", `<span class="mono">v${num(health.database.schema_version)}</span>`)}
+            ${metaItem("Repositories", `<span class="mono">${num(health.database.imported_repositories)}</span>`)}
+            ${metaItem("Database size", `<span class="mono">${bytes(health.database.size_bytes)}</span>`)}
+            ${metaItem("Status", health.warnings.length ? '<span class="badge badge--warn">degraded</span>' : '<span class="badge badge--ok">ok</span>')}
           </div>
-          <div style="margin-top:10px">
-            <label>Database file</label><div class="settings-readonly">${esc(health.database.path)}</div>
-            <label style="margin-top:8px">Config file</label><div class="settings-readonly">${esc(payload.paths.config_file || "(defaults in use)")}</div>
+          <div class="mt-12">
+            <div class="meta-label">Database file</div><div class="settings-readonly">${esc(health.database.path)}</div>
+            <div class="meta-label mt-12">Config file</div><div class="settings-readonly">${esc(payload.paths.config_file || "(defaults in use)")}</div>
           </div>
-          ${health.warnings.map((warning) => `<div class="insight insight-warning" style="margin-top:10px"><span class="insight-icon">⚠️</span><div>${esc(warning)}</div></div>`).join("")}
+          ${health.warnings
+            .map((warning) => `<div class="insight insight--warning mt-12"><span class="insight-icon">${Icons.get("alert")}</span><div class="insight-body">${esc(warning)}</div></div>`)
+            .join("")}
         </div>
       </section>
 
       <section class="panel">
-        <div class="panel-header"><h2>Scanning &amp; analysis thresholds</h2><span class="panel-sub">stored in config.json</span></div>
-        <div class="form-grid">
-          <div class="field"><label>history_depth — commits stored per scan</label><input id="s-history_depth" type="number" min="1" value="${settings.history_depth}" /></div>
-          <div class="field"><label>max_scan_depth — discovery recursion depth</label><input id="s-max_scan_depth" type="number" min="1" max="64" value="${settings.max_scan_depth}" /></div>
-          <div class="field"><label>git_binary</label><input id="s-git_binary" value="${esc(settings.git_binary)}" /></div>
-          <div class="field"><label>git_timeout_seconds</label><input id="s-git_timeout_seconds" type="number" min="1" value="${settings.git_timeout_seconds}" /></div>
-          <div class="field"><label>inactive_branch_days</label><input id="s-inactive_branch_days" type="number" min="0" value="${settings.inactive_branch_days}" /></div>
-          <div class="field"><label>stale_branch_days</label><input id="s-stale_branch_days" type="number" min="1" value="${settings.stale_branch_days}" /></div>
-          <div class="field"><label>repo_inactive_days</label><input id="s-repo_inactive_days" type="number" min="0" value="${settings.repo_inactive_days}" /></div>
-          <div class="field"><label>repo_stale_days</label><input id="s-repo_stale_days" type="number" min="1" value="${settings.repo_stale_days}" /></div>
-          <div class="field"><label>repo_abandoned_days</label><input id="s-repo_abandoned_days" type="number" min="1" value="${settings.repo_abandoned_days}" /></div>
-          <div class="field"><label>refresh_interval_minutes (0 = off)</label><input id="s-refresh_interval_minutes" type="number" min="0" value="${settings.refresh_interval_minutes}" /></div>
-          <div class="field"><label>log_level</label>
-            <select id="s-log_level">${["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"].map((level) => `<option ${settings.log_level === level ? "selected" : ""}>${level}</option>`).join("")}</select></div>
-          <div class="field"><label>host</label><input id="s-host" value="${esc(settings.host)}" /></div>
-          <div class="field"><label>port</label><input id="s-port" type="number" min="1" max="65535" value="${settings.port}" /></div>
+        ${panelHead("Scanning &amp; analysis thresholds", "Stored in config.json · restart the server for host and port changes", "", "settings")}
+        <div class="form-section">
+          <div class="form-section-title">History collection</div>
+          <div class="form-grid">
+            ${numberField("history_depth", "history_depth — commits stored per scan", { min: 1 })}
+            ${numberField("max_scan_depth", "max_scan_depth — discovery recursion depth", { min: 1, max: 64 })}
+            ${textField("git_binary", "git_binary")}
+            ${numberField("git_timeout_seconds", "git_timeout_seconds", { min: 1 })}
+            ${numberField("refresh_interval_minutes", "refresh_interval_minutes (0 = off)", { min: 0 })}
+          </div>
         </div>
-        <div class="toolbar" style="margin-top:12px">
-          <button class="btn btn-primary" id="save-settings">Save settings</button>
-          <span class="muted">Thresholds must satisfy inactive &lt; stale &lt; abandoned.</span>
+        <div class="form-section">
+          <div class="form-section-title">Thresholds</div>
+          <div class="form-grid">
+            ${numberField("inactive_branch_days", "inactive_branch_days")}
+            ${numberField("stale_branch_days", "stale_branch_days", { min: 1 })}
+            ${numberField("repo_inactive_days", "repo_inactive_days")}
+            ${numberField("repo_stale_days", "repo_stale_days", { min: 1 })}
+            ${numberField("repo_abandoned_days", "repo_abandoned_days", { min: 1 })}
+          </div>
+          <p class="label-hint">Thresholds must satisfy inactive &lt; stale &lt; abandoned.</p>
+        </div>
+        <div class="form-section">
+          <div class="form-section-title">Server</div>
+          <div class="form-grid">
+            ${textField("host", "host")}
+            ${numberField("port", "port", { min: 1, max: 65535 })}
+            <div class="field"><label for="s-log_level">log_level</label>
+              <select id="s-log_level">${["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
+                .map((level) => `<option ${settingsPayload.log_level === level ? "selected" : ""}>${level}</option>`)
+                .join("")}</select></div>
+          </div>
+        </div>
+        <div class="toolbar mt-16">
+          <button class="btn btn-primary" id="save-settings">${Icons.get("check")}Save settings</button>
         </div>
       </section>
 
       <section class="panel">
-        <div class="panel-header"><h2>Data &amp; exports</h2><span class="panel-sub">everything stays on this machine</span></div>
+        ${panelHead("Data &amp; exports", "Everything stays on this machine", "", "download")}
         <div class="toolbar">
-          <button class="btn" id="export-json">⬇ JSON snapshot</button>
-          <button class="btn" id="write-snapshot">Write snapshot to data/exports</button>
-          <button class="btn" id="backup">Backup SQLite database</button>
-          <button class="btn" id="download-repos">CSV: repositories</button>
-          <button class="btn" id="download-commits">CSV: commits</button>
-          <button class="btn" id="download-branches">CSV: branches</button>
-          <button class="btn" id="download-contributors">CSV: contributors</button>
-          <button class="btn" id="download-scans">CSV: scan runs</button>
+          <button class="btn" id="export-json">${Icons.get("download")}JSON snapshot</button>
+          <button class="btn" id="write-snapshot">${Icons.get("database")}Write snapshot to data/exports</button>
+          <button class="btn" id="backup">${Icons.get("database")}Backup SQLite database</button>
+          <button class="btn" id="download-repos">${Icons.get("download")}CSV: repositories</button>
+          <button class="btn" id="download-commits">${Icons.get("download")}CSV: commits</button>
+          <button class="btn" id="download-branches">${Icons.get("download")}CSV: branches</button>
+          <button class="btn" id="download-contributors">${Icons.get("download")}CSV: contributors</button>
+          <button class="btn" id="download-scans">${Icons.get("download")}CSV: scan runs</button>
         </div>
-        <p class="tooltip-note" style="margin-top:8px">CSV exports include every repository; use the repository page for per-repository data.</p>
+        <p class="tooltip-note mt-8">CSV exports include every repository; use the repository page for per-repository data.</p>
       </section>
     `;
 
     const inputs = [
-      "history_depth", "max_scan_depth", "git_binary", "git_timeout_seconds", "inactive_branch_days",
-      "stale_branch_days", "repo_inactive_days", "repo_stale_days", "repo_abandoned_days",
-      "refresh_interval_minutes", "log_level", "host", "port",
+      "history_depth",
+      "max_scan_depth",
+      "git_binary",
+      "git_timeout_seconds",
+      "inactive_branch_days",
+      "stale_branch_days",
+      "repo_inactive_days",
+      "repo_stale_days",
+      "repo_abandoned_days",
+      "refresh_interval_minutes",
+      "log_level",
+      "host",
+      "port",
     ];
     root.querySelector("#save-roots").addEventListener("click", () => saveSettingsPatch({ repository_roots: parseRoots(root) }));
     root.querySelector("#save-settings").addEventListener("click", () => {
@@ -977,8 +1331,13 @@
         ctx.toast(error.message, "error");
       }
     });
-    [["download-repos", "repositories"], ["download-commits", "commits"], ["download-branches", "branches"],
-     ["download-contributors", "contributors"], ["download-scans", "scan_runs"]].forEach(([id, table]) => {
+    [
+      ["download-repos", "repositories"],
+      ["download-commits", "commits"],
+      ["download-branches", "branches"],
+      ["download-contributors", "contributors"],
+      ["download-scans", "scan_runs"],
+    ].forEach(([id, table]) => {
       root.querySelector(`#${id}`).addEventListener("click", () => Fmt.download(Api.exportCsvUrl(table)));
     });
 
@@ -1014,9 +1373,10 @@
       container.innerHTML = data.roots.length
         ? data.roots
             .map(
-              (entry) =>
-                `<div class="insight ${entry.exists ? "insight-info" : "insight-warning"}"><span class="insight-icon">${entry.exists ? "📁" : "⚠️"}</span>
-                  <div class="mono">${esc(entry.path)}${entry.exists ? "" : " — does not exist"}</div></div>`
+              (entry) => `<div class="insight ${entry.exists ? "insight--info" : "insight--warning"}">
+                <span class="insight-icon">${Icons.get(entry.exists ? "file" : "alert")}</span>
+                <div class="insight-body mono">${esc(entry.path)}${entry.exists ? "" : " — does not exist"}</div>
+              </div>`
             )
             .join("")
         : `<p class="muted">No roots configured yet. Add one so the dashboard can discover repositories automatically.</p>`;
@@ -1027,27 +1387,35 @@
 
   async function runDiscovery(root, ctx, register) {
     const container = root.querySelector("#roots-status");
-    container.innerHTML = `<div class="loading">Scanning configured roots…</div>`;
+    container.innerHTML = UI.loading("Scanning configured roots…");
     try {
       const result = await Api.discover({ register });
       const repositories = (result.roots || []).flatMap((entry) => entry.repositories || []);
       container.innerHTML = `
         <p class="muted">${num(result.count)} repository(ies) found${register ? `, ${num(result.registered_count || 0)} registered` : ""}.</p>
-        <div class="table-wrap" style="max-height:280px;overflow:auto"><table>
-          <thead><tr><th>Path</th><th>Status</th></tr></thead>
-          <tbody>${repositories
-            .map(
-              (repository) =>
-                `<tr><td class="mono">${esc(repository.path)}</td><td>${
-                  repository.already_registered ? '<span class="badge badge-neutral">registered</span>' : '<span class="badge badge-info">new</span>'
-                }</td></tr>`
-            )
-            .join("") || `<tr><td colspan="2" class="muted">Nothing found. Check the root paths.</td></tr>`}</tbody>
+        <div class="table-wrap table-wrap--scroll" style="max-height:280px"><table class="table table--compact">
+          <thead><tr><th scope="col">Path</th><th scope="col">Status</th></tr></thead>
+          <tbody>${
+            repositories
+              .map(
+                (repository) =>
+                  `<tr><td class="mono">${esc(repository.path)}</td><td>${
+                    repository.already_registered
+                      ? '<span class="badge badge--neutral">registered</span>'
+                      : '<span class="badge badge--info">new</span>'
+                  }</td></tr>`
+              )
+              .join("") || `<tr><td colspan="2" class="muted center">Nothing found. Check the root paths.</td></tr>`
+          }</tbody>
         </table></div>
-        ${result.errors && result.errors.length ? `<p class="tooltip-note">${result.errors.length} directory(ies) could not be read.</p>` : ""}
+        ${
+          result.errors && result.errors.length
+            ? `<p class="tooltip-note mt-8">${num(result.errors.length)} directory(ies) could not be read.</p>`
+            : ""
+        }
       `;
       if (register && (result.registered_count || 0) > 0) {
-        ctx.toast(`Registered ${result.registered_count} repository(ies) — starting a scan.`, "ok");
+        ctx.toast(`Registered ${num(result.registered_count)} repository(ies) — starting a scan.`, "ok");
         ctx.startScanAll({ discover: false });
       }
     } catch (error) {

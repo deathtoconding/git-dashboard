@@ -1,42 +1,46 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Local Git Repository Dashboard</title>
-  <meta name="description" content="Local, self-sufficient dashboard for local Git repositories. No GitHub API, no cloud, no build step." />
+  <meta name="description" content="Local, self-sufficient dashboard for Git repositories on this machine. No GitHub API, no cloud, no build step." />
+  <meta name="color-scheme" content="light dark" />
   <link rel="stylesheet" href="/static/styles.css" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌳</text></svg>" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='12' cy='12' r='3.4' fill='none' stroke='%2358a6ff' stroke-width='1.8'/><path d='M3 12h5.6M15.4 12H21' stroke='%2358a6ff' stroke-width='1.8' stroke-linecap='round'/></svg>" />
 </head>
 <body>
-  <div class="layout">
+  <a class="skip-link" href="#view">Skip to content</a>
+
+  <div class="app">
     <aside class="sidebar">
       <div class="brand">
-        <span class="brand-mark">◈</span>
+        <span class="brand-mark" id="brand-mark"></span>
         <div>
-          <strong>Git Dashboard</strong>
-          <small>local &amp; offline</small>
+          <div class="brand-title">Git Dashboard</div>
+          <div class="brand-sub">
+            <span class="state-dot state-dot--ok" id="local-dot"></span>
+            local &amp; offline
+          </div>
         </div>
       </div>
 
-      <nav id="nav">
-        <a href="/" data-route="/">📊 Dashboard</a>
-        <a href="/repositories" data-route="/repositories">📁 Repositories</a>
-        <a href="/activity" data-route="/activity">📈 Activity</a>
-        <a href="/branches" data-route="/branches">🌿 Branches</a>
-        <a href="/settings" data-route="/settings">⚙️ Settings</a>
-      </nav>
+      <nav class="nav" id="nav" aria-label="Main"></nav>
 
       <div class="sidebar-footer">
-        <div class="scan-box" id="scan-box">
-          <div class="scan-status" id="scan-status">
-            <span class="dot dot-idle"></span>
-            <span id="scan-status-text">Idle</span>
+        <div class="scan-card">
+          <div class="scan-state" id="scan-status" role="status">
+            <span class="state-dot state-dot--idle"></span>
+            <span id="scan-status-text">Idle — no scans yet</span>
           </div>
+          <div class="progress" id="scan-progress" hidden><span></span></div>
           <button class="btn btn-primary btn-block" id="btn-scan-all" title="Discover, register and scan every repository">
-            ⟳ Scan all repositories
+            <span class="btn-icon-slot" data-icon="scan"></span> Scan all repositories
           </button>
-          <button class="btn btn-ghost btn-block" id="btn-refresh" title="Reload the current view">↻ Refresh view</button>
+          <button class="btn btn-ghost btn-block" id="btn-refresh" title="Reload the current view">
+            <span class="btn-icon-slot" data-icon="refresh"></span> Refresh view <span class="kbd">R</span>
+          </button>
+          <div class="scan-hint">Scans run when you ask; figures update after each scan.</div>
         </div>
         <div class="meta" id="system-meta"></div>
       </div>
@@ -45,30 +49,45 @@
     <main class="content">
       <header class="topbar">
         <div>
-          <h1 id="page-title">Dashboard</h1>
-          <p class="muted" id="page-subtitle">Local Git repository health and activity</p>
+          <div class="page-title">
+            <h1 id="page-title">Dashboard</h1>
+            <span id="page-badge"></span>
+          </div>
+          <p class="page-sub" id="page-subtitle">Repository health and activity at a glance</p>
         </div>
-        <div class="topbar-actions" id="topbar-actions"></div>
+        <div class="topbar-actions" id="topbar-actions">
+          <button class="switch" id="theme-toggle" type="button" aria-label="Switch colour theme" title="Switch colour theme">
+            <span data-theme-icon></span><span data-theme-label>Theme</span>
+          </button>
+        </div>
       </header>
 
-      <div id="view" class="view" aria-live="polite">
-        <div class="loading">Loading…</div>
+      <div id="view" class="view" tabindex="-1">
+        <div class="kpis">
+          <div class="kpi-card"><div class="skeleton skeleton-line w-30"></div><div class="skeleton skeleton-line w-60" style="height:20px"></div><div class="skeleton skeleton-line w-80"></div></div>
+          <div class="kpi-card"><div class="skeleton skeleton-line w-30"></div><div class="skeleton skeleton-line w-60" style="height:20px"></div><div class="skeleton skeleton-line w-80"></div></div>
+          <div class="kpi-card"><div class="skeleton skeleton-line w-30"></div><div class="skeleton skeleton-line w-60" style="height:20px"></div><div class="skeleton skeleton-line w-80"></div></div>
+          <div class="kpi-card"><div class="skeleton skeleton-line w-30"></div><div class="skeleton skeleton-line w-60" style="height:20px"></div><div class="skeleton skeleton-line w-80"></div></div>
+        </div>
+        <div class="panel"><div class="skeleton skeleton-line w-30"></div><div class="skeleton skeleton-block"></div></div>
       </div>
     </main>
   </div>
 
-  <div id="toasts" class="toasts" aria-live="assertive"></div>
-  <div id="modal" class="modal hidden" role="dialog" aria-modal="true">
+  <div id="toasts" class="toasts" role="status" aria-live="polite"></div>
+
+  <div id="modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modal-title">
     <div class="modal-card">
-      <header class="modal-header">
-        <h2 id="modal-title">Details</h2>
-        <button class="btn btn-ghost" id="modal-close" aria-label="Close">✕</button>
+      <header class="modal-head">
+        <div class="modal-title" id="modal-title">Details</div>
+        <button class="btn btn-ghost btn-icon" id="modal-close" aria-label="Close dialog" title="Close (Esc)"></button>
       </header>
       <div class="modal-body" id="modal-body"></div>
     </div>
   </div>
 
   <script src="/static/api.js"></script>
+  <script src="/static/ui.js"></script>
   <script src="/static/charts.js"></script>
   <script src="/static/views.js"></script>
   <script src="/static/app.js"></script>
