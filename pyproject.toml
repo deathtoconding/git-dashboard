@@ -1,0 +1,44 @@
+[project]
+name = "git-dashboard"
+version = "1.0.0"
+description = "Local, self-sufficient Git repository dashboard. No GitHub API, no cloud, no build step."
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.110,<1.0",
+    "uvicorn[standard]>=0.27,<1.0",
+]
+
+[project.scripts]
+git-dashboard = "app.__main__:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q -m 'not slow'"
+markers = [
+    "slow: tests that build real repositories and exercise the full pipeline",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+exclude = ["data", ".venv", "frontend"]
+
+[tool.ruff.lint]
+# Quality gate for the project: correctness (E/F/W), imports (I), modernisation
+# (UP), bugbear (B), comprehensions (C4) and simplification (SIM).
+select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM"]
+ignore = [
+    "SIM108",  # ternaries are not always clearer than if/else
+    "B008",    # FastAPI's documented pattern is Depends() in argument defaults
+    "E501",    # line length is handled by the formatter
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E402"]  # conftest imports after sys.path manipulation
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["app"]

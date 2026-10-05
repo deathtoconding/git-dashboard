@@ -1,0 +1,8 @@
+# Local Git Repository Dashboard - runtime requirements
+# The dashboard is intentionally dependency-light: everything runs locally,
+# offline, with no cloud service, no paid API and no build step.
+
+fastapi>=0.110,<1.0
+uvicorn[standard]>=0.27,<1.0
+
+# --- Test / development requirements (installed via requirements-dev.txt) ---

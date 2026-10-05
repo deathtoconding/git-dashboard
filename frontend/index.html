@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Local Git Repository Dashboard</title>
+  <meta name="description" content="Local, self-sufficient dashboard for local Git repositories. No GitHub API, no cloud, no build step." />
+  <link rel="stylesheet" href="/static/styles.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌳</text></svg>" />
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="brand">
+        <span class="brand-mark">◈</span>
+        <div>
+          <strong>Git Dashboard</strong>
+          <small>local &amp; offline</small>
+        </div>
+      </div>
+
+      <nav id="nav">
+        <a href="/" data-route="/">📊 Dashboard</a>
+        <a href="/repositories" data-route="/repositories">📁 Repositories</a>
+        <a href="/activity" data-route="/activity">📈 Activity</a>
+        <a href="/branches" data-route="/branches">🌿 Branches</a>
+        <a href="/settings" data-route="/settings">⚙️ Settings</a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="scan-box" id="scan-box">
+          <div class="scan-status" id="scan-status">
+            <span class="dot dot-idle"></span>
+            <span id="scan-status-text">Idle</span>
+          </div>
+          <button class="btn btn-primary btn-block" id="btn-scan-all" title="Discover, register and scan every repository">
+            ⟳ Scan all repositories
+          </button>
+          <button class="btn btn-ghost btn-block" id="btn-refresh" title="Reload the current view">↻ Refresh view</button>
+        </div>
+        <div class="meta" id="system-meta"></div>
+      </div>
+    </aside>
+
+    <main class="content">
+      <header class="topbar">
+        <div>
+          <h1 id="page-title">Dashboard</h1>
+          <p class="muted" id="page-subtitle">Local Git repository health and activity</p>
+        </div>
+        <div class="topbar-actions" id="topbar-actions"></div>
+      </header>
+
+      <div id="view" class="view" aria-live="polite">
+        <div class="loading">Loading…</div>
+      </div>
+    </main>
+  </div>
+
+  <div id="toasts" class="toasts" aria-live="assertive"></div>
+  <div id="modal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-card">
+      <header class="modal-header">
+        <h2 id="modal-title">Details</h2>
+        <button class="btn btn-ghost" id="modal-close" aria-label="Close">✕</button>
+      </header>
+      <div class="modal-body" id="modal-body"></div>
+    </div>
+  </div>
+
+  <script src="/static/api.js"></script>
+  <script src="/static/charts.js"></script>
+  <script src="/static/views.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>
