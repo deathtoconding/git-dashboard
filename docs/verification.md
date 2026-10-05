@@ -102,6 +102,22 @@ repository count because it aggregates every repository in one request.
 
 ## 4. Fresh-install workflow
 
+The steps below are also available as a script, which is what a fresh machine or
+a wiped workspace should use:
+
+```bash
+scripts/dev_server.sh            # venv -> deps -> config -> demo -> discover -> scan -> serve
+```
+
+Observed on an empty workspace (15.5s from nothing to a serving dashboard):
+creating the venv, installing dependencies, writing `config.json`, generating the
+demo dataset, `8 repository(ies) found.`, `8 scanned, 0 failed, 545 commits added
+in 365ms`, then `Uvicorn running on http://0.0.0.0:8000`. A second run reported
+`keeping the existing config.json`, skipped the demo generation, and started a
+second instance on port 8999 (`/api/health` → `200`), confirming idempotency.
+
+The individual commands:
+
 An empty directory, an empty environment, no database and no `config.json`:
 
 ```bash

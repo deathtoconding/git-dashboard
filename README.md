@@ -110,6 +110,16 @@ python -m app scan --all             # collect commits, branches, contributors
 python -m app start                  # http://127.0.0.1:8000
 ```
 
+### One-command setup
+
+`scripts/dev_server.sh` performs the setup above and starts the server; it is
+idempotent, so it is also the way to bring a machine back to a serving state:
+
+```bash
+scripts/dev_server.sh                                  # 0.0.0.0:8000, demo dataset
+scripts/dev_server.sh --root ~/projects --skip-demo     # your own repositories
+```
+
 ### Everyday commands
 
 ```bash

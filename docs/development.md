@@ -18,7 +18,20 @@ pip install -e ".[dev]"     # runtime + pytest, httpx, ruff; installs `git-dashb
 equivalent without installing the package itself. Without installation, run the
 CLI as `python -m app …` from the project root.
 
-Running the app during development:
+One-command bootstrap (creates the venv, installs dependencies, writes
+`config.json` when missing, generates the demo dataset when missing, discovers,
+scans and serves):
+
+```bash
+scripts/dev_server.sh                                  # http://0.0.0.0:8000
+scripts/dev_server.sh --host 127.0.0.1 --port 9000
+scripts/dev_server.sh --root ~/projects --skip-demo    # point at real repositories
+```
+
+It is idempotent and only writes git-ignored runtime files, so running it again
+never overwrites an edited `config.json` or re-generates existing demo data.
+
+Running the app manually during development:
 
 ```bash
 python -m app --config config.json start --reload --log-level DEBUG
