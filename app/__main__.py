@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Any
 
 from . import __version__
-from .config import ConfigError, Settings, load_settings, save_settings
+from .config import DEFAULT_CONFIG_PATH, ConfigError, Settings, load_settings, save_settings, validate_settings
 from .database.connection import Database, DatabaseError
 from .database.store import Store
 from .logging_config import configure_logging, get_logger
@@ -62,7 +62,10 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     start.add_argument("--open", action="store_true", help="Open the dashboard in the default browser")
     start.add_argument("--scan-on-start", action="store_true", help="Run a scan before serving requests")
 
-    subparsers.add_parser("init-config", parents=[common], help="Write a config.json with the current defaults")
+    init_config = subparsers.add_parser(
+        "init-config", parents=[common], help="Write a config.json with the current defaults"
+    )
+    init_config.add_argument("--force", action="store_true", help="Overwrite an existing config.json")
 
     discover = subparsers.add_parser("discover", parents=[common], help="Find Git repositories under a root directory")
     discover.add_argument("root", nargs="?", help="Root directory (defaults to the configured repository_roots)")
@@ -350,7 +353,22 @@ def cmd_export(args: argparse.Namespace, settings: Settings) -> int:
 
 
 def cmd_init_config(args: argparse.Namespace, settings: Settings) -> int:
-    path = save_settings(settings, path=args.config or None)
+    target = Path(args.config) if args.config else (settings.config_path or DEFAULT_CONFIG_PATH)
+    if target.exists() and not getattr(args, "force", False):
+        # Never clobber hand-edited configuration (previously `init-config`
+        # silently overwrote an existing file).
+        print(f"{target} already exists; pass --force to overwrite it.", file=sys.stderr)
+        return 1
+    # Write the built-in defaults (plus explicit CLI overrides) rather than the
+    # values loaded from the file being replaced: `init-config` is the reset
+    # button as well as the initial setup.
+    overrides: dict[str, Any] = {}
+    if getattr(args, "database", None):
+        overrides["database_path"] = args.database
+    if getattr(args, "log_level", None):
+        overrides["log_level"] = args.log_level
+    defaults = validate_settings(Settings(), overrides) if overrides else Settings()
+    path = save_settings(defaults, path=target)
     print(f"Configuration written to {path}")
     print("Edit 'repository_roots' to point at the folders that contain your Git repositories.")
     return 0

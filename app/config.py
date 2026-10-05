@@ -20,6 +20,10 @@ from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 from typing import Any
 
+from .logging_config import get_logger
+
+log = get_logger("config")
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG_PATH = PROJECT_ROOT / "config.json"
 ENV_PREFIX = "GITDASH_"
@@ -285,10 +289,16 @@ def load_settings(
     env = dict(os.environ if environ is None else environ)
     root = Path(project_root) if project_root else PROJECT_ROOT
 
-    raw_path = config_path or env.get(f"{ENV_PREFIX}CONFIG") or DEFAULT_CONFIG_PATH
+    explicit_path = config_path or env.get(f"{ENV_PREFIX}CONFIG")
+    raw_path = explicit_path or DEFAULT_CONFIG_PATH
     path = Path(os.path.expanduser(str(raw_path)))
     if not path.is_absolute():
         path = root / path
+
+    if explicit_path and not path.exists():
+        # Silently falling back to defaults here means a typo in --config turns
+        # into "the dashboard is empty" instead of an obvious mistake.
+        log.warning("configuration file %s does not exist; using defaults", path)
 
     merged: dict[str, Any] = {}
     merged.update(_read_config_file(path))
