@@ -77,7 +77,7 @@ async function main() {
     ["/activity", "svg"],
     ["/branches", "table tbody tr"],
     ["/settings", "#settings-roots, textarea, .panel"],
-    ["/", ".card, .metric"],
+    ["/", ".kpi-card, .panel"],
   ];
 
   for (const [route, selector] of steps) {
@@ -102,7 +102,7 @@ async function main() {
     const body = window.document.body.textContent;
     if (!/health|commit/i.test(body)) errors.push("repository detail: expected health/commit content");
     for (const [tab, selector] of [["commits", "table tbody tr, .empty-state"], ["branches", "table tbody tr, .empty-state"], ["contributors", "table tbody tr, .empty-state"], ["insights", "li, .empty-state, .insight"]]) {
-      const button = [...window.document.querySelectorAll("button, a")].find((element) => element.textContent.trim().toLowerCase() === tab);
+      const button = [...window.document.querySelectorAll("[data-tab]")].find((element) => element.dataset.tab === tab);
       if (!button) {
         errors.push(`repository detail: '${tab}' tab button missing`);
         continue;
@@ -114,7 +114,7 @@ async function main() {
     }
 
     // Open the first commit and check the file table inside the modal.
-    const commitsButton = [...window.document.querySelectorAll("button, a")].find((element) => element.textContent.trim().toLowerCase() === "commits");
+    const commitsButton = window.document.querySelector("[data-tab='commits']");
     if (commitsButton) {
       commitsButton.click();
       await sleep(1200);
@@ -139,6 +139,44 @@ async function main() {
   const rowCount = window.document.querySelectorAll("#view table tbody tr").length;
   consoleLines.push(`repository rows: ${rowCount}`);
   if (rowCount !== 8) errors.push(`repositories view: expected 8 rows, found ${rowCount}`);
+
+  // Shell affordances: theme toggle and command palette must exist and work.
+  const themeButton = window.document.getElementById("theme-toggle");
+  if (!themeButton) errors.push("theme toggle missing");
+  else {
+    const before = window.document.documentElement.getAttribute("data-theme");
+    themeButton.click();
+    await sleep(200);
+    const after = window.document.documentElement.getAttribute("data-theme");
+    if (before === after) errors.push("theme toggle did not change data-theme");
+    else consoleLines.push(`theme toggle: ${before} -> ${after}`);
+    themeButton.click();
+    await sleep(200);
+  }
+
+  const paletteButton = window.document.getElementById("palette-open");
+  if (!paletteButton) errors.push("command palette button missing");
+  else {
+    paletteButton.click();
+    await sleep(300);
+    const palette = window.document.querySelector(".palette");
+    if (!palette) errors.push("command palette did not open");
+    else {
+      const input = window.document.getElementById("palette-input");
+      let suggestions = window.document.querySelectorAll(".palette-item").length;
+      if (!suggestions) errors.push("command palette has no entries");
+      if (input) {
+        input.value = "settings";
+        input.dispatchEvent(new window.Event("input", { bubbles: true }));
+        await sleep(200);
+        suggestions = window.document.querySelectorAll(".palette-item").length;
+        if (!suggestions) errors.push("command palette filtering returned nothing for 'settings'");
+      }
+      consoleLines.push(`palette: ok (${suggestions} entries after filter)`);
+      input && input.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      await sleep(150);
+    }
+  }
 
   const rendered = window.document.body.textContent.replace(/\s+/g, " ").trim();
   const result = {
