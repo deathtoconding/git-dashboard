@@ -56,7 +56,7 @@ app/
 ├── logging_config.py
 ├── main.py          # FastAPI factory and lifespan
 └── __main__.py      # CLI (subcommands, exit codes)
-frontend/            # buildless UI: index.html + assets/{styles,api,charts,views,app}.js
+frontend/            # buildless UI: index.html + assets/{styles,api,ui,charts,views,app}.js
 scripts/             # create_demo_repos.py
 tests/               # pytest suite (see below)
 docs/                # architecture, configuration, verification, development
@@ -182,20 +182,37 @@ Fixtures live in `tests/conftest.py`: `settings` (temporary config and database)
 
 - Plain HTML/CSS/JS only; no npm, no bundler, no build step. Assets are served
   from `/static` and the server falls back to `index.html` for non-API paths.
+- Assets load in one fixed order and the router depends on it:
+  `api.js` → `ui.js` → `charts.js` → `views.js` → `app.js`.
 - Views are functions `(root, ctx, ...params)` returning rendered HTML, exposed on
-  `window.Views`; shared helpers live in `api.js` (`Api`, `Fmt`) and `charts.js`.
-- Frontend state is persisted in `localStorage` under `git-dashboard-state-v1`.
-- After changes, walk the UI by hand or with the optional harness (Node + jsdom,
-  nothing the app itself depends on):
+  `window.Views`. `ctx` carries the per-view contract: `state`, `persistState`,
+  `navigate`, `reload`, `toast`, `showModal`/`hideModal`, `pollScan`,
+  `startScanAll` and `openPalette`.
+- Shared helpers: `Fmt` (formatting, escaping, badges, meters, avatars) and `Api`
+  in `api.js`; `Icons`, `UI.theme`, `UI.toast`, `UI.modal`, `UI.palette`,
+  `UI.copy` in `ui.js`; SVG renderers in `charts.js`.
+- Style with the classes in `styles.css` and its custom properties — never with
+  inline hex colours, otherwise the dark theme breaks. Add new colours as
+  `--*` tokens in both theme blocks.
+- Frontend state is persisted in `localStorage` under `git-dashboard-state-v1`
+  (filters, ranges, tab) and `git-dashboard-theme` (explicit theme choice).
+- After changes, walk the UI by hand or with the optional harnesses (Node +
+  jsdom, nothing the app itself depends on):
 
   ```bash
-  python -m app --config config.json start &
+  scripts/dev_server.sh --host 0.0.0.0 &
   npm install --prefix /tmp/ui-smoke jsdom
   NODE_PATH=/tmp/ui-smoke/node_modules node scripts/ui_smoke.js http://127.0.0.1:8000
+  NODE_PATH=/tmp/ui-smoke/node_modules node scripts/ui_audit.js http://127.0.0.1:8000
   ```
 
-  It covers every view, every repository tab and the commit dialog, and fails on
-  console errors or failed requests.
+  `ui_smoke.js` covers every view, every repository tab and the commit dialog and
+  fails on console errors or failed requests. `ui_audit.js` additionally asserts
+  the design system is wired up (charts, meters, heatmap, filters, tabs, modal
+  focus, theme cycle, keyboard shortcuts, persisted state, accessible names) and
+  ends by running a real incremental scan through the sidebar button.
+- There is no real-browser automation here: jsdom checks structure and behaviour,
+  not layout. Look at the page in a browser before calling a visual change done.
 
 ## Definition of done
 
@@ -209,6 +226,8 @@ Before a change is considered complete:
 4. Documentation is updated: `README.md` for user-visible behaviour,
    `docs/configuration.md` for new keys, `docs/architecture.md` for structural
    changes, and `docs/verification.md` when the verification record changes.
+   Frontend changes also update `scripts/ui_smoke.js` / `scripts/ui_audit.js`
+   when the markup they assert on changes.
 5. The app was exercised manually at least once in the way the change affects it
    (CLI command, API call, or UI view).
 6. The change is committed on its own, with a message explaining *why*.

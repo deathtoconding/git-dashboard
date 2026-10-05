@@ -48,9 +48,10 @@ disk, and a hung `git` cannot exhaust the web server.
 | `app/services/repository_service.py` | Registration, discovery endpoints, suggestions, removal |
 | `app/services/export_service.py` | JSON snapshots, CSV dumps, SQLite backups, comparisons |
 | `app/models/schemas.py` | Pydantic request/response models used by the routers |
+| `app/api/serializers.py` | Derived, UI-ready repository fields (staleness, days since commit, health summary) shared by the routes |
 | `app/api/*` | FastAPI routers, dependency wiring, SPA fallback |
 | `app/__main__.py` | CLI subcommands, output formatting, exit codes (also installed as `git-dashboard`) |
-| `frontend/` | Buildless UI: `index.html` plus `assets/{styles.css,api.js,charts.js,views.js,app.js}` |
+| `frontend/` | Buildless UI: `index.html` plus `assets/{styles.css,api.js,ui.js,charts.js,views.js,app.js}` |
 
 ## HTTP API surface
 
@@ -138,10 +139,17 @@ recomputed by hand. Grades are `A ≥ 85`, `B ≥ 70`, `C ≥ 55`, `D ≥ 40`, `
 - **Discovery never raises on permissions.** Unreadable directories are skipped
   and counted, because a projects root often contains directories the user
   cannot read.
-- **No build step and no npm.** The frontend is `index.html` plus five static
-  assets (`styles.css`, `api.js`, `charts.js`, `views.js`, `app.js`) served from
-  `/static`; the server falls back to `index.html` for unknown non-API paths so
-  client-side routes work on a hard refresh.
+- **No build step and no npm.** The frontend is `index.html` plus six static
+  assets served from `/static` and loaded in one fixed order: `api.js` (client
+  and `Fmt` helpers), `ui.js` (icon set, theme, toasts, modal, command palette),
+  `charts.js` (SVG renderers), `views.js` (one function per route) and `app.js`
+  (router, shell behaviour). The server falls back to `index.html` for unknown
+  non-API paths so client-side routes work on a hard refresh.
+- **One stylesheet, token driven.** `styles.css` defines every colour, radius,
+  shadow and type scale as a CSS custom property, overridden for the dark theme
+  under `[data-theme="dark"]` (with a `prefers-color-scheme` fallback for users
+  who never touched the switch). Charts read the same variables, so they follow
+  the theme without re-rendering.
 - **Frontend state lives in one place.** Filters and view preferences are
-  persisted in `localStorage` under `git-dashboard-state-v1`; nothing is
-  inferred from the server.
+  persisted in `localStorage` under `git-dashboard-state-v1`, the colour theme
+  under `git-dashboard-theme`; nothing is inferred from the server.

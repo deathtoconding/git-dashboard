@@ -6,8 +6,8 @@ reproducible: every command below can be run in a clean checkout and produces
 comparable output.
 
 **Verification date:** 2026-10-05
-**Verified revision:** `7fcf8da` — the thirteenth commit on top of the initial
-commit (`git rev-list --count d2f514d..7fcf8da` = 13). The commit that adds this
+**Verified revision:** `a1efecb` — the twenty-second commit on top of the initial
+commit (`git rev-list --count d2f514d..a1efecb` = 22). The commit that adds this
 document changes documentation only, so the results apply to the branch tip as
 well.
 
@@ -16,7 +16,10 @@ suite, `2618478` documentation and fixes found while verifying, `23952d1`
 architecture-boundary test, `4ac35a8` startup Git probe, `54385da` CLI safety and
 CLI tests, `d842c0a` markers and dev extras, `f49127c` version guard, `1cb60d3`
 formatting, `4eada1e` packaging, `27ba32e` documented-endpoint test, `0e850dd`
-global CLI flags, `7fcf8da` UI smoke script.
+global CLI flags, `7fcf8da` UI smoke script, `ea12a99` documentation restructure,
+`b11a8ee` bootstrap script, `3cd3a04` ruff in dev requirements, `4a557bd` design
+system, `9aac550` UI kit, `d1993e6` theme-aware charts, `2c25e28` derived
+repository fields, `72e08a3` rebuilt shell and views, `a1efecb` UI audit.
 
 ## Environment
 
@@ -43,9 +46,9 @@ python -m pytest -m slow -s            # performance tests, prints [perf] lines
 Observed:
 
 ```text
-python -m pytest                  193 passed, 4 deselected, 1 warning in 9.33s
-python -m pytest -m requires_git   63 passed, 134 deselected, 1 warning in 26.15s
-python -m pytest -m slow -s        4 passed, 193 deselected, 1 warning in 21.32s
+python -m pytest                  194 passed, 4 deselected, 1 warning in 10.53s
+python -m pytest -m requires_git   63 passed, 135 deselected, 1 warning in 28.06s
+python -m pytest -m slow -s        4 passed, 194 deselected, 1 warning in 21.90s
 ```
 
 The single warning is a third-party deprecation notice from
@@ -63,7 +66,7 @@ Coverage by module:
 | `test_database.py` | schema, upserts, filters, pagination, cascades, scan runs |
 | `test_collectors.py` | repository states, branch classification, incremental walks, contributors |
 | `test_analyzers.py` | metrics, activity, heatmap, churn, branch health, health transparency, insights |
-| `test_api.py` | every route, scan/export/settings, SPA fallback, architecture boundary, documented-endpoint list |
+| `test_api.py` | every route, scan/export/settings, SPA fallback, architecture boundary, documented-endpoint list, index.html asset integrity |
 | `test_logging.py` | repository context, one-line records, tolerant setup |
 | `test_integration.py` | discovery → scan → SQLite → analysis → API end to end |
 | `test_failures.py` | missing git, vanished/corrupt/read-only repositories, timeouts, database failures |
@@ -80,7 +83,7 @@ Observed:
 
 ```text
 All checks passed!
-55 files already formatted
+56 files already formatted
 ```
 
 ## 3. Performance
@@ -89,10 +92,10 @@ All checks passed!
 line per repository count:
 
 ```text
-[perf] repositories=  1 fixture_build=  0.03s discovery= 0.004s scan= 0.057s incremental_scan= 0.059s db=    120.0 KiB api_list=   29.3ms api_dashboard=   10.5ms api_commits=   10.3ms
-[perf] repositories= 10 fixture_build=  0.34s discovery= 0.035s scan= 0.386s incremental_scan= 0.380s db=    128.0 KiB api_list=   25.2ms api_dashboard=   21.8ms api_commits=    8.5ms
-[perf] repositories= 50 fixture_build=  1.60s discovery= 0.184s scan= 2.126s incremental_scan= 2.681s db=    288.0 KiB api_list=   34.1ms api_dashboard=   76.8ms api_commits=   16.4ms
-[perf] repositories=100 fixture_build=  3.90s discovery= 0.405s scan= 3.942s incremental_scan= 3.862s db=    452.0 KiB api_list=   27.9ms api_dashboard=  108.8ms api_commits=   11.7ms
+[perf] repositories=  1 fixture_build=  0.04s discovery= 0.006s scan= 0.052s incremental_scan= 0.047s db=    120.0 KiB api_list=   34.4ms api_dashboard=   11.6ms api_commits=   12.8ms
+[perf] repositories= 10 fixture_build=  0.34s discovery= 0.046s scan= 0.443s incremental_scan= 0.436s db=    128.0 KiB api_list=   25.8ms api_dashboard=   17.7ms api_commits=   12.7ms
+[perf] repositories= 50 fixture_build=  1.75s discovery= 0.218s scan= 2.152s incremental_scan= 2.006s db=    288.0 KiB api_list=   27.4ms api_dashboard=   55.2ms api_commits=    9.0ms
+[perf] repositories=100 fixture_build=  3.45s discovery= 0.417s scan= 4.678s incremental_scan= 4.295s db=    448.0 KiB api_list=   69.7ms api_dashboard=  113.6ms api_commits=   12.9ms
 ```
 
 Each repository contains 3 commits and ~26 KiB of `.git`. Two observations worth
@@ -190,28 +193,58 @@ endpoint; the repository page reuses `Views.insightsHtml`).
 
 ## 6. UI verification (headless)
 
-`scripts/ui_smoke.js` (optional developer tool; requires Node and jsdom, see the
-header of the script) loaded the real page from the running server, replaced
-`fetch` with a recorder and walked the UI:
-
-```text
-errors: []            failedRequests: []        requests: 23 (17 unique paths)
-/repositories: ok     /activity: ok             /branches: ok
-/settings: ok         /: ok                     repository detail: /repositories/1
-repo tab commits: ok  branches: ok              contributors: ok      insights: ok
-commit modal: ok (Commit adf9addc …)
-repository rows: 8
-```
+Two optional developer tools (Node + jsdom, see their headers) loaded the real
+page from the running server with `fetch` replaced by a recorder. Nothing in the
+application depends on them.
 
 ```bash
 npm install --prefix /tmp/ui-smoke jsdom
 NODE_PATH=/tmp/ui-smoke/node_modules node scripts/ui_smoke.js http://127.0.0.1:8000
+NODE_PATH=/tmp/ui-smoke/node_modules node scripts/ui_audit.js http://127.0.0.1:8000
 ```
 
-The harness asserted that every view rendered a table/chart/form, that the
-repository page opened from the list, that all four tabs rendered rows, that the
-commit dialog opened with file details, and that no request failed. It caught two
-real frontend bugs (see below).
+`scripts/ui_smoke.js` walks every view, every repository tab and the commit
+dialog:
+
+```text
+errors: []            failedRequests: []        requests: 26 (20 unique paths)
+/repositories: ok     /activity: ok             /branches: ok
+/settings: ok         /: ok                     repository detail: /repositories/1
+repo tab commits: ok  branches: ok              contributors: ok      insights: ok
+commit modal: ok (Commit 9aa58f57 …)
+repository rows: 8    theme toggle: null -> light   palette: ok (1 entry after filter)
+```
+
+`scripts/ui_audit.js` asserts that the design system is actually wired up rather
+than merely present, and finishes by driving a real scan:
+
+```text
+errors: []
+theme states: light, dark, system          tabs rendered: 5
+branch rows: 22 -> 8 after the stale filter
+scan progress indicator seen: state-dot state-dot--busy
+expectedRepositories: 8                    audits: 7
+```
+
+What the audit checks: 6 KPI cards with a rendered activity chart and sparkline,
+sidebar and page badges matching `/api/repositories`, health meters for every row,
+health ring plus the five weighted signal bars on the repository page, 168
+heatmap cells and 10 churn bars, `aria-selected` tracking while the audit walks
+five of the six repository tabs, modal focus moving inside
+the dialog and back on close, the theme cycling light → dark → system with the
+choice persisted, `g r` keyboard navigation, persisted bucket state after a
+re-render, an accessible name on every button/link/tab of each view, and the
+sidebar scan button producing a busy indicator, a progress bar, a completion
+toast, a re-enabled button and an `ok` indicator.
+
+Colour contrast was verified by computing WCAG ratios from the token values (no
+browser needed): body text on surface 17.85:1 light / 15.04:1 dark, muted text
+5.43 / 6.91, primary button label 4.63 / 7.48, and every badge/status pair
+≥ 4.5:1 in both themes after darkening the light-theme `--ok` and `--warn`
+tokens (they were 4.44 and 4.17).
+
+Layout, native rendering, animations and print output are **not** covered here —
+see the known limitations below.
 
 ## 7. Architecture boundary
 
@@ -230,6 +263,7 @@ once in the startup hook, so no request handler waits on a Git process.
 | `init-config` silently overwrote a hand-edited `config.json` | `save_settings` wrote unconditionally | refuses without `--force`; `--force` resets to defaults |
 | A typo in `--config` silently used defaults (looked like "empty dashboard") | missing explicit config file was ignored | warning naming the missing file |
 | `repositories.state` NOT NULL violation when a caller omitted `state` | upsert did not default the column | defaults to `"unknown"` |
+| Overview tables showed no health and a "never" age for every repository | `/api/dashboard` returned raw rows while `/api/repositories` enriched them with derived fields | enrichment moved to `app/api/serializers.py` and used by both routes, with a test comparing the payloads |
 | Discovery crashed on unreadable directories | `pathlib` re-raises `EACCES` from `is_dir()` | guarded; unreadable directories are skipped and counted |
 | `repo_factory(..., bare=True)` failed | helper pushed to a branch that did not exist yet (`git init -b` semantics) | helper uses `--initial-branch` and pushes `main` |
 | A wheel built from the project contained `app/` only | `packages = ["app"]` listed no subpackages | `packages.find` with `include = ["app*"]`, verified with `pip wheel` |
@@ -252,8 +286,11 @@ install answers `/` with an explanatory message while the JSON API keeps working
 
 ## Known limitations of this verification
 
-- The UI check runs in jsdom, not a real browser: layout, CSS and native
-  rendering are not covered. There is no browser-automation test in the suite.
+- The UI checks run in jsdom, not a real browser: layout, CSS painting,
+  animations and native rendering are not covered, and no screenshot comparison
+  exists. jsdom also has no layout engine, so the audit asserts structure,
+  behaviour and (computed) colour contrast rather than geometry. Visual work was
+  reviewed in the browser by hand.
 - Verification ran on Linux only; Windows and macOS were not exercised (path
   normalization is unit-tested, but not the platforms themselves).
 - Performance numbers come from this sandbox's filesystem; they are relative

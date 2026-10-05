@@ -18,7 +18,7 @@ working with the network switched off.
 - Calculate repository activity and health metrics
 - Incrementally scan repositories (only new commits are collected)
 - Store normalized data in SQLite
-- Browse repositories in a local web UI, including commit history and details
+- Browse repositories in a local web UI with light/dark themes, keyboard shortcuts and a command palette
 - Run scans through the CLI or the HTTP API
 - Export JSON snapshots, CSV dumps and SQLite backups
 
@@ -152,6 +152,17 @@ Every other key has a default; see [docs/configuration.md](docs/configuration.md
 
 ## Dashboard
 
+The web UI is plain HTML/CSS/JS served from `/static` — no bundler, no npm
+runtime dependency, no CDN. Every figure on screen is computed from collected
+Git data; nothing is estimated or placeholder-filled. The theme follows the
+operating system by default and the theme switch cycles
+light → dark → follow system.
+
+Keyboard shortcuts: `Cmd`/`Ctrl`+`K` or `/` opens the command palette (views,
+repositories and actions), `R` reloads the current view, `g` then
+`d`/`r`/`a`/`b`/`s` jumps to Dashboard/Repositories/Activity/Branches/Settings,
+and `Esc` closes dialogs.
+
 ### Overview
 
 Aggregate metrics for every registered repository:
@@ -250,22 +261,25 @@ listed in [docs/architecture.md](docs/architecture.md#http-api-surface).
 
 ## Verification
 
-Automated and manual verification was run against commit `7fcf8da` on
-2026-10-05 (the documentation commit that follows changes no code):
+Automated and manual verification was run against commit `a1efecb` on
+2026-10-05 (the 22nd commit on top of the initial commit; the documentation
+commit that follows changes no code):
 
 ```text
-python -m pytest                 193 passed, 4 deselected
+python -m pytest                 194 passed, 4 deselected
 python -m pytest -m slow         4 passed (1/10/50/100 repositories)
-python -m pytest -m requires_git 63 passed, 134 deselected
+python -m pytest -m requires_git 63 passed, 135 deselected
 ruff check app tests scripts     clean
 ruff format --check app tests scripts  clean
 ```
 
 The manual record covers a live API workflow (8 repositories, 545 commits,
 incremental rescan), a fresh-install workflow in an empty directory, a headless
-UI walk through every view and dialog, and the architecture-boundary check. The
-complete record — commands, observed output, discovered bugs, known limitations
-and the exact commit history — is in [docs/verification.md](docs/verification.md).
+UI walk through every view and dialog, a structural UI audit (theme cycle,
+keyboard shortcuts, modal focus, chart and heatmap markup, scan progress) and the
+architecture-boundary check. The complete record — commands, observed output,
+discovered bugs, known limitations and the exact commit history — is in
+[docs/verification.md](docs/verification.md).
 
 ## Verified demo dataset
 
