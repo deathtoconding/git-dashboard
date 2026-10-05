@@ -8,6 +8,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 from ... import __version__
+from ...analyzers.briefing import build_briefing
 from ...analyzers.health import dashboard_insights
 from ...analyzers.metrics import activity_series, summarize_series
 from ...config import ConfigError, save_settings
@@ -149,32 +150,46 @@ def dashboard(
 
     series = _global_series(services.store, days=days, bucket=bucket)
     total_commits_30d = services.store.count_commits_all(since=_days_ago(30))
+    scan_status = services.scan_manager.status()
+
+    cards = {
+        "repositories": summary["repositories"],
+        "uncommitted_changes": summary["uncommitted_files"],
+        "dirty_repositories": summary["dirty_repositories"],
+        "branches": summary["branches"],
+        "stale_branches": services.store.count_stale_branches(),
+        "commits": summary["total_commits"],
+        "commits_last_30d": total_commits_30d,
+        "contributors": summary["contributors"],
+        "stale_repositories": summary["stale_repositories"],
+        "failing_repositories": summary["failing_repositories"],
+        "average_health": round(float(summary.get("average_health") or 0), 1),
+        "detached_repositories": summary["detached_repositories"],
+        "abandoned_repositories": summary.get("abandoned_repositories", 0),
+    }
+    activity = {"days": days, "bucket": bucket, "series": series, "summary": summarize_series(series)}
+    insights = dashboard_insights(services.store, settings=services.settings, limit=15)
+    stored_scan = services.store.latest_scan_run()
 
     return {
-        "cards": {
-            "repositories": summary["repositories"],
-            "uncommitted_changes": summary["uncommitted_files"],
-            "dirty_repositories": summary["dirty_repositories"],
-            "branches": summary["branches"],
-            "stale_branches": services.store.count_stale_branches(),
-            "commits": summary["total_commits"],
-            "commits_last_30d": total_commits_30d,
-            "contributors": summary["contributors"],
-            "stale_repositories": summary["stale_repositories"],
-            "failing_repositories": summary["failing_repositories"],
-            "average_health": round(float(summary.get("average_health") or 0), 1),
-            "detached_repositories": summary["detached_repositories"],
-        },
-        "activity": {
-            "days": days,
-            "bucket": bucket,
-            "series": series,
-            "summary": summarize_series(series),
-        },
+        "cards": cards,
+        "activity": activity,
+        # The narrative layer: headline, judgement and the first thing to do.
+        "briefing": build_briefing(
+            cards=cards,
+            insights=insights,
+            repositories=repositories,
+            scan=scan_status,
+            stored_scan=stored_scan,
+            activity=activity,
+            quiet_after_days=services.settings.repo_inactive_days,
+            stale_branch_days=services.settings.stale_branch_days,
+            now=reference,
+        ),
         "recent_repositories": recent,
         "repositories": repositories,
-        "insights": dashboard_insights(services.store, settings=services.settings, limit=15),
-        "scan": services.scan_manager.status(),
+        "insights": insights,
+        "scan": scan_status,
         "last_updated": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
     }
 

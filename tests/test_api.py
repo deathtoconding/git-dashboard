@@ -296,6 +296,26 @@ def test_dashboard_and_insights_endpoints(client, repo_factory) -> None:
         assert row["days_since_last_commit"] == enriched["days_since_last_commit"]
         assert row["staleness"] == enriched["staleness"]
 
+    # The briefing is the narrative layer and must reflect the same data.
+    briefing = dashboard["briefing"]
+    assert briefing["tone"] in {"neutral", "ok", "warn", "danger"}
+    assert briefing["headline"]
+    assert briefing["counts"]["repositories"] == dashboard["cards"]["repositories"]
+    for severity in ("error", "warning", "info"):
+        expected = sum(1 for item in dashboard["insights"] if item["severity"] == severity)
+        assert briefing["counts"][severity] == expected, f"briefing {severity} count drifted from the insight list"
+    assert len(briefing["lines"]) <= 5
+    severities = [line["severity"] for line in briefing["lines"]]
+    assert severities == sorted(severities, key=lambda value: {"error": 0, "warning": 1, "info": 2}[value])
+    assert briefing["next_action"]["text"]
+    assert briefing["last_scan"]["scanned"] >= 1
+
+    # The stale repository drives the decay line and the first action.
+    decay = next(line for line in briefing["lines"] if line["code"] == "decay")
+    assert decay["repository_id"] == stale["id"]
+    assert str(stale["id"]) in {str(line["repository_id"]) for line in briefing["lines"] if line["repository_id"]}
+    assert briefing["tone"] == "danger"
+
     insights = client.get("/api/insights").json()
     assert insights["counts"]["error"] >= 1  # the stale repository
     assert any(item["repository_name"] == "stale-repo" for item in insights["items"])
