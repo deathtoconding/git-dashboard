@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from app import __version__
 from tests import helpers
 from tests.conftest import requires_git
 
@@ -399,12 +400,59 @@ def test_export_endpoints(client, repo_factory) -> None:
 
 
 # ---------------------------------------------------------------------- API docs
+DOCUMENTED_PATHS = (
+    "/api/health",
+    "/api/version",
+    "/api/dashboard",
+    "/api/insights",
+    "/api/activity",
+    "/api/activity/repositories",
+    "/api/branches",
+    "/api/repositories",
+    "/api/repositories/bulk",
+    "/api/repositories/suggestions",
+    "/api/repositories/discover",
+    "/api/repositories/compare",
+    "/api/repositories/{repository_id}",
+    "/api/repositories/{repository_id}/status",
+    "/api/repositories/{repository_id}/commits",
+    "/api/repositories/{repository_id}/commits/{sha}",
+    "/api/repositories/{repository_id}/branches",
+    "/api/repositories/{repository_id}/metrics",
+    "/api/repositories/{repository_id}/activity",
+    "/api/repositories/{repository_id}/contributors",
+    "/api/repositories/{repository_id}/contributor-trends",
+    "/api/repositories/{repository_id}/heatmap",
+    "/api/repositories/{repository_id}/file-churn",
+    "/api/repositories/{repository_id}/health",
+    "/api/repositories/{repository_id}/recent-activity",
+    "/api/repositories/{repository_id}/scan",
+    "/api/scan/all",
+    "/api/scan/full",
+    "/api/scan/repositories",
+    "/api/scan/status",
+    "/api/scan/jobs",
+    "/api/scan/history",
+    "/api/settings",
+    "/api/settings/roots",
+    "/api/export/json",
+    "/api/export/csv/{table}",
+    "/api/export/snapshot",
+    "/api/export/backup",
+)
+
+
 def test_openapi_schema_is_valid(client) -> None:
     schema = client.get("/openapi.json").json()
     assert schema["info"]["title"] == "Local Git Repository Dashboard"
-    paths = schema["paths"]
-    for expected in ("/api/health", "/api/repositories", "/api/branches", "/api/scan/status", "/api/settings"):
-        assert expected in paths
+    assert schema["info"]["version"] == __version__
+
+
+def test_every_documented_endpoint_exists(client) -> None:
+    """The endpoint list in README.md/docs/architecture.md must stay accurate."""
+    paths = set(client.get("/openapi.json").json()["paths"])
+    assert set(DOCUMENTED_PATHS) <= paths, sorted(set(DOCUMENTED_PATHS) - paths)
+    assert paths <= set(DOCUMENTED_PATHS), sorted(paths - set(DOCUMENTED_PATHS))
 
 
 # ------------------------------------------------------------------- startup
