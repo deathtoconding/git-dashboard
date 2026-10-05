@@ -27,8 +27,9 @@
     repoFilters: { search: "", status: "all", staleness: "all", sort: "last_commit", order: "desc", page: 1 },
   };
 
-  const state = Object.assign({}, defaultState, {
-    repoFilters: Object.assign({}, defaultState.repoFilters, (readState().repoFilters || {})),
+  const persisted = readState();
+  const state = Object.assign({}, defaultState, persisted, {
+    repoFilters: Object.assign({}, defaultState.repoFilters, persisted.repoFilters || {}),
   });
 
   const ROUTES = [

@@ -12,6 +12,7 @@ import logging
 import logging.handlers
 import os
 import sys
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -83,5 +84,11 @@ def get_logger(name: str) -> logging.Logger:
 
 def get_repo_logger(name: str, repo: Any) -> logging.LoggerAdapter:
     """Return a logger that stamps every record with a repository identifier."""
-    identifier = repo if isinstance(repo, str) else getattr(repo, "name", None) or getattr(repo, "path", None) or str(repo)
+    if isinstance(repo, str):
+        identifier = repo
+    elif isinstance(repo, Mapping):
+        # Repository rows are plain dicts; never dump the whole row into a log line.
+        identifier = repo.get("name") or repo.get("path") or str(repo)
+    else:
+        identifier = getattr(repo, "name", None) or getattr(repo, "path", None) or str(repo)
     return logging.LoggerAdapter(get_logger(name), {"repo": identifier})
