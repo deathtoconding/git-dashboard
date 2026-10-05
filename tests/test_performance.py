@@ -18,8 +18,9 @@ from pathlib import Path
 import pytest
 
 from tests import helpers
+from tests.conftest import requires_git
 
-pytestmark = [pytest.mark.slow, pytest.mark.skipif(not helpers.GIT_AVAILABLE, reason="git is required")]
+pytestmark = [pytest.mark.slow, requires_git]
 
 REPOSITORY_COUNTS = [1, 10, 50, 100]
 COMMITS_PER_REPOSITORY = 3

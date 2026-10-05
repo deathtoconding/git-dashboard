@@ -20,7 +20,21 @@ from app.services.repository_service import RepositoryService  # noqa: E402
 from app.services.scan_service import ScanService  # noqa: E402
 from tests import helpers  # noqa: E402
 
-requires_git = pytest.mark.skipif(not helpers.GIT_AVAILABLE, reason="git executable is required for this test")
+# Marker for tests that need a real `git` binary. Registered in pyproject.toml
+# so `pytest -m requires_git` selects them; `pytest_collection_modifyitems`
+# below turns it into a skip when Git is missing, which keeps the decorator
+# usable both per test (`@requires_git`) and per module (`pytestmark = ...`).
+requires_git = pytest.mark.requires_git
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    """Skip every `requires_git` test when no git executable is available."""
+    if helpers.GIT_AVAILABLE:
+        return
+    skip = pytest.mark.skip(reason="git executable is required for this test")
+    for item in items:
+        if "requires_git" in item.keywords:
+            item.add_marker(skip)
 
 
 @pytest.fixture
