@@ -414,9 +414,8 @@ def test_startup_reports_the_git_version(settings, caplog) -> None:
 
     from app.main import create_app
 
-    with caplog.at_level("INFO", logger="app.main"):
-        with TestClient(create_app(settings)) as client:
-            assert client.get("/api/health").status_code == 200
+    with caplog.at_level("INFO", logger="app.main"), TestClient(create_app(settings)) as client:
+        assert client.get("/api/health").status_code == 200
     messages = [record.getMessage() for record in caplog.records if record.name == "app.main"]
     assert any("| git: git" in message for message in messages), messages
 

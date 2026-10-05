@@ -7,6 +7,7 @@ only process spawned is `git`, by the collectors themselves.
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from pathlib import Path
 
@@ -66,6 +67,14 @@ def test_version_flag(capsys: pytest.CaptureFixture[str]) -> None:
         main(["--version"])
     assert excinfo.value.code == 0
     assert __version__ in capsys.readouterr().out
+
+
+def test_version_is_declared_in_exactly_one_place() -> None:
+    """`app.__version__` and `pyproject.toml` must not drift apart."""
+    pyproject = Path(__file__).resolve().parents[1] / "pyproject.toml"
+    match = re.search(r'^version = "([^"]+)"', pyproject.read_text(encoding="utf-8"), re.MULTILINE)
+    assert match is not None
+    assert match.group(1) == __version__
 
 
 def test_unknown_configuration_key_is_a_configuration_error(
